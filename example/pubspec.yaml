@@ -1,0 +1,32 @@
+name: gps_tracker_example
+description: "Demonstrates how to use the gps_tracker plugin."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  gps_tracker:
+    path: ../
+
+  cupertino_icons: ^1.0.8
+
+  permission_handler: ^10.0.0
+  sqflite: ^2.0.0+4
+  path_provider: ^2.0.3
+  gps_tracker_db:
+    path: /Users/macbook/StudioProjects/gps_tracker_db
+  shared_preferences: ^2.0.18
+dev_dependencies:
+  integration_test:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
