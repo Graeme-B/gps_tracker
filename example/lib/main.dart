@@ -11,11 +11,11 @@ import 'package:intl/intl.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() => runApp(
-  MaterialApp(
-    home: const MyApp(),
-    navigatorKey: navigatorKey, // Setting a global key for navigator
-  ),
-);
+      MaterialApp(
+        home: const MyApp(),
+        navigatorKey: navigatorKey, // Setting a global key for navigator
+      ),
+    );
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -25,184 +25,155 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  String LISTENER_NAME              = "com.moorwen.main";
-  String _permissionStatus          = 'Unknown status.';
-  String _batteryLevel              = 'Unknown battery level.';
+  String LISTENER_NAME = "com.moorwen.main";
+  String _permissionStatus = 'Unknown status.';
+  String _batteryLevel = 'Unknown battery level.';
   String _locationPermanentlyDenied = 'Unknown location permanently denied.';
-  String _locationEnabled           = 'Unknown location enabled.';
-  String _accuracyLevel             = 'Unknown accuracy level.';
-  String _location                  = 'Unknown location.';
-  String _numWalkTrackPoints        = 'Unknown points.';
-  String _distance                  = 'Unknown distance.';
+  String _locationEnabled = 'Unknown location enabled.';
+  String _accuracyLevel = 'Unknown accuracy level.';
+  String _location = 'Unknown location.';
+  String _numWalkTrackPoints = 'Unknown points.';
+  String _distance = 'Unknown distance.';
   Timer? _timer;
-  bool permissionsGranted = false;
   bool serviceStarted = false;
   bool tracking = false;
 
-  ElevatedButton startServiceButton =
-    const ElevatedButton(
-      onPressed: null,
-      child: Text('Start'),
-    );
-  ElevatedButton stopServiceButton =
-    const ElevatedButton(
-      onPressed: null,
-      child: Text('Stop'),
-    );
-  ElevatedButton startTrackingButton =
-    const ElevatedButton(
-      onPressed: null,
-      child: Text('Start Tracking'),
-    );
-  ElevatedButton stopTrackingButton =
-    const ElevatedButton(
-      onPressed: null,
-      child: Text('Stop Tracking'),
-    );
-  ElevatedButton showDistanceButton =
-    const ElevatedButton(
-      onPressed: null,
-      child: Text('Distance'),
-    );
-  ElevatedButton showNumPointsButton =
-    const ElevatedButton(
-      onPressed: null,
-      child: Text('Num points'),
-    );
-  ElevatedButton showLocationButton =
-    const ElevatedButton(
-      onPressed: null,
-      child: Text('Location'),
-    );
+  ElevatedButton startServiceButton = const ElevatedButton(
+    onPressed: null,
+    child: Text('Start'),
+  );
+  ElevatedButton stopServiceButton = const ElevatedButton(
+    onPressed: null,
+    child: Text('Stop'),
+  );
+  ElevatedButton startTrackingButton = const ElevatedButton(
+    onPressed: null,
+    child: Text('Start Tracking'),
+  );
+  ElevatedButton stopTrackingButton = const ElevatedButton(
+    onPressed: null,
+    child: Text('Stop Tracking'),
+  );
+  ElevatedButton showDistanceButton = const ElevatedButton(
+    onPressed: null,
+    child: Text('Distance'),
+  );
+  ElevatedButton showNumPointsButton = const ElevatedButton(
+    onPressed: null,
+    child: Text('Num points'),
+  );
+  ElevatedButton showLocationButton = const ElevatedButton(
+    onPressed: null,
+    child: Text('Location'),
+  );
 
-    @override
-    void initState() {
-      super.initState();
-      // IsFirstRun.isFirstCall().then((firstCall){
-      //   int i = 3;
-      // });
-      WidgetsBinding.instance.addObserver(this);
-    }
+  @override
+  void initState() {
+    super.initState();
+    // IsFirstRun.isFirstCall().then((firstCall){
+    //   int i = 3;
+    // });
+    WidgetsBinding.instance.addObserver(this);
+  }
 
-    void _actionsWhenPermissionGranted() {
-    if (!permissionsGranted) {
-      setState(() {
-        startServiceButton =
-            ElevatedButton(
-              onPressed: _startService,
-              child: const Text('Start'),
-            );
-      });
-    }
+  void _actionsWhenPermissionGranted() {
+    setState(() {
+      startServiceButton = ElevatedButton(
+        onPressed: _startService,
+        child: const Text('Start'),
+      );
+    });
   }
 
   void _actionsWhenServiceStarted() {
     setState(() {
-      startServiceButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Start'),
-          );
-      stopServiceButton =
-          ElevatedButton(
-            onPressed: _stopService,
-            child: const Text('Stop'),
-          );
-      startTrackingButton =
-          ElevatedButton(
-            onPressed: _startTracking,
-            child: const Text('Start Tracking'),
-          );
+      startServiceButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Start'),
+      );
+      stopServiceButton = ElevatedButton(
+        onPressed: _stopService,
+        child: const Text('Stop'),
+      );
+      startTrackingButton = ElevatedButton(
+        onPressed: _startTracking,
+        child: const Text('Start Tracking'),
+      );
     });
   }
 
   void _actionsWhenServiceStopped() {
     setState(() {
-      startServiceButton =
-          ElevatedButton(
-            onPressed: _startService,
-            child: const Text('Start'),
-          );
-      stopServiceButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Stop'),
-          );
-      startTrackingButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Start Tracking'),
-          );
+      startServiceButton = ElevatedButton(
+        onPressed: _startService,
+        child: const Text('Start'),
+      );
+      stopServiceButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Stop'),
+      );
+      startTrackingButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Start Tracking'),
+      );
     });
   }
 
   void _actionsWhenTrackingStarted() {
     setState(() {
-      stopServiceButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Stop'),
-          );
-      startTrackingButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Start Tracking'),
-          );
-      stopTrackingButton =
-          ElevatedButton(
-            onPressed: _stopTracking,
-            child: const Text('Stop Tracking'),
-          );
-      showDistanceButton =
-          ElevatedButton(
-            onPressed: _getDistance,
-            child: const Text('Distance'),
-          );
-      showNumPointsButton =
-          ElevatedButton(
-            onPressed: _getNumWalkTrackPoints,
-            child: const Text('Num points'),
-          );
-      showLocationButton =
-          ElevatedButton(
-            onPressed: _getLocation,
-            child: const Text('Location'),
-          );
+      stopServiceButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Stop'),
+      );
+      startTrackingButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Start Tracking'),
+      );
+      stopTrackingButton = ElevatedButton(
+        onPressed: _stopTracking,
+        child: const Text('Stop Tracking'),
+      );
+      showDistanceButton = ElevatedButton(
+        onPressed: _getDistance,
+        child: const Text('Distance'),
+      );
+      showNumPointsButton = ElevatedButton(
+        onPressed: _getNumWalkTrackPoints,
+        child: const Text('Num points'),
+      );
+      showLocationButton = ElevatedButton(
+        onPressed: _getLocation,
+        child: const Text('Location'),
+      );
     });
   }
 
   void _actionsWhenTrackingStopped() {
     setState(() {
-      stopServiceButton =
-          ElevatedButton(
-            onPressed: _stopService,
-            child: const Text('Stop'),
-          );
-      startTrackingButton =
-          ElevatedButton(
-            onPressed: _startTracking,
-            child: const Text('Start Tracking'),
-          );
-      stopTrackingButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Stop Tracking'),
-          );
-      showDistanceButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Distance'),
-          );
-      showNumPointsButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Num points'),
-          );
-      showLocationButton =
-          const ElevatedButton(
-            onPressed: null,
-            child: Text('Location'),
-          );
+      stopServiceButton = ElevatedButton(
+        onPressed: _stopService,
+        child: const Text('Stop'),
+      );
+      startTrackingButton = ElevatedButton(
+        onPressed: _startTracking,
+        child: const Text('Start Tracking'),
+      );
+      stopTrackingButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Stop Tracking'),
+      );
+      showDistanceButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Distance'),
+      );
+      showNumPointsButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Num points'),
+      );
+      showLocationButton = const ElevatedButton(
+        onPressed: null,
+        child: Text('Location'),
+      );
     });
   }
 
@@ -214,88 +185,74 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           title: const Text('Tracker Test App'),
         ),
         body: Center(
-          child: Column(
-            children: <Widget>[
-              Row(
-                  children: <Widget>[
-                    const Spacer(flex: 20),
-                    ElevatedButton(
-                      onPressed: _checkPermissions,
-                      child: const Text('Permissions'),
-                    ),
-                    const Spacer(flex: 20),
-                  ]
-              ),
-              Text(_permissionStatus),
-
-              Row(
-                  children: <Widget>[
-                    const Spacer(flex: 20),
-                    ElevatedButton(
-                      onPressed: _requestPermissions,
-                      child: const Text('Request permissions'),
-                    ),
-                    const Spacer(flex: 20),
-                  ]
-              ),
-
-              ElevatedButton(
-                onPressed: _getBatteryLevel,
-                child: const Text('Get Battery Level'),
-              ),
-              Text(_batteryLevel),
-              ElevatedButton(
-                onPressed: _getLocationPermanentlyDenied,
-                child: const Text('Show location permanently denied'),
-              ),
-              Text(_locationPermanentlyDenied),
-              ElevatedButton(
-                onPressed: _getLocationEnabled,
-                child: const Text('Get Location Enabled'),
-              ),
-              Text(_locationEnabled),
-
-              ElevatedButton(
-                onPressed: _getAccuracyLevel,
-                child: const Text('Get Accuracy Level'),
-              ),
-              Text(_accuracyLevel),
-
-              Row(
-                  children: <Widget>[
-                    const Spacer(flex: 20),
-                    startServiceButton,
-                    const Spacer(),
-                    stopServiceButton,
-                    const Spacer(flex: 20),
-                  ]
-              ),
-
-              Row(
-                  children: <Widget>[
-                    const Spacer(flex: 20),
-                    startTrackingButton,
-                    const Spacer(),
-                    stopTrackingButton,
-                    const Spacer(flex: 20),
-                  ]
-              ),
-              Row(
-                  children: <Widget>[
-                    const Spacer(flex: 20),
-                    showDistanceButton,
-                    const Spacer(),
-                    showNumPointsButton,
-                    const Spacer(),
-                    showLocationButton,
-                    const Spacer(flex: 20),
-                  ]
-              ),
-
-              Text(_numWalkTrackPoints),
-              Text(_location),
-              Text(_distance),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              children: <Widget>[
+                Row(children: <Widget>[
+                  const Spacer(flex: 10),
+                  ElevatedButton(
+                    onPressed: _checkPermissions,
+                    child: const Text('Permissions'),
+                  ),
+                  const Spacer(flex: 10),
+                ]),
+                Text(_permissionStatus),
+                Row(children: <Widget>[
+                  const Spacer(flex: 10),
+                  ElevatedButton(
+                    onPressed: _requestPermissions,
+                    child: const Text('Request permissions'),
+                  ),
+                  const Spacer(flex: 10),
+                ]),
+                ElevatedButton(
+                  onPressed: _getBatteryLevel,
+                  child: const Text('Get Battery Level'),
+                ),
+                Text(_batteryLevel),
+                ElevatedButton(
+                  onPressed: _getLocationPermanentlyDenied,
+                  child: const Text('Show location permanently denied'),
+                ),
+                Text(_locationPermanentlyDenied),
+                ElevatedButton(
+                  onPressed: _getLocationEnabled,
+                  child: const Text('Get Location Enabled'),
+                ),
+                Text(_locationEnabled),
+                ElevatedButton(
+                  onPressed: _getAccuracyLevel,
+                  child: const Text('Get Accuracy Level'),
+                ),
+                Text(_accuracyLevel),
+                Row(children: <Widget>[
+                  const Spacer(flex: 10),
+                  startServiceButton,
+                  const Spacer(),
+                  stopServiceButton,
+                  const Spacer(flex: 10),
+                ]),
+                Row(children: <Widget>[
+                  const Spacer(flex: 10),
+                  startTrackingButton,
+                  const Spacer(),
+                  stopTrackingButton,
+                  const Spacer(flex: 10),
+                ]),
+                Row(children: <Widget>[
+                  const Spacer(flex: 10),
+                  showDistanceButton,
+                  const Spacer(),
+                  showNumPointsButton,
+                  const Spacer(),
+                  showLocationButton,
+                  const Spacer(flex: 10),
+                ]),
+                Text(_numWalkTrackPoints),
+                Text(_location),
+                Text(_distance),
+              ],
+            ),
           ),
         ),
       ),
@@ -334,20 +291,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _requestPermissions() async {
-
     int status = await GpsTracker.getCurrentLocationPermissions();
     switch (status) {
       case GpsTracker.GRANTED:
         _actionsWhenPermissionGranted();
         break;
+
       case GpsTracker.DENIED:
         while (status == GpsTracker.DENIED) {
           status = await GpsTracker.requestLocationPermissions();
         }
         if (status == GpsTracker.GRANTED) {
           _actionsWhenPermissionGranted();
-        }
-        else if (status == GpsTracker.PERMANENTLY_DENIED) {
+        } else if (status == GpsTracker.PERMANENTLY_DENIED) {
           showDialog(
               context: context,
               builder: (BuildContext context) {
@@ -380,8 +336,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _startService() async
-  {
+  Future<void> _startService() async {
     if (!serviceStarted) {
       GpsTracker.addGpsListener(_listener);
       await GpsTracker.start(
@@ -395,8 +350,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _actionsWhenServiceStarted();
   }
 
-  Future<void> _stopService() async
-  {
+  Future<void> _stopService() async {
     if (serviceStarted) {
       GpsTracker.removeGpsListener(_listener);
       GpsTracker.stop();
@@ -405,14 +359,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _actionsWhenServiceStopped();
   }
 
-  Future<void> _getBatteryLevel() async
-  {
+  Future<void> _getBatteryLevel() async {
     String batteryLevel;
     try {
       final int result = await GpsTracker.batteryLevel;
       batteryLevel = 'Battery level at $result % .';
-    }
-    on PlatformException catch (e) {
+    } on PlatformException catch (e) {
       batteryLevel = "Failed to get battery level: '${e.message}'.";
     }
 
@@ -421,15 +373,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _getLocationPermanentlyDenied() async
-  {
+  Future<void> _getLocationPermanentlyDenied() async {
     String loctionPermanentlyDenied;
     try {
       final bool result = await GpsTracker.locationPermanentlyDenied;
       loctionPermanentlyDenied = 'Location permanently denied $result.';
-    }
-    on PlatformException catch (e) {
-      loctionPermanentlyDenied = "Failed to get location permanently denied: '${e.message}'.";
+    } on PlatformException catch (e) {
+      loctionPermanentlyDenied =
+          "Failed to get location permanently denied: '${e.message}'.";
     }
 
     setState(() {
@@ -437,14 +388,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _getLocationEnabled() async
-  {
+  Future<void> _getLocationEnabled() async {
     String locationEnabled;
     try {
       final int result = await GpsTracker.locationEnabled;
       locationEnabled = 'Location enabled $result.';
-    }
-    on PlatformException catch (e) {
+    } on PlatformException catch (e) {
       locationEnabled = "Failed to get location enabled: '${e.message}'.";
     }
 
@@ -453,14 +402,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _getAccuracyLevel() async
-  {
+  Future<void> _getAccuracyLevel() async {
     String accuracyLevel;
     try {
       final int result = await GpsTracker.accuracyLevel;
       accuracyLevel = 'Accuracy level at $result.';
-    }
-    on PlatformException catch (e) {
+    } on PlatformException catch (e) {
       accuracyLevel = "Failed to get battery level: '${e.message}'.";
     }
 
@@ -469,8 +416,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _startTracking() async
-  {
+  Future<void> _startTracking() async {
     if (serviceStarted && !tracking) {
       var db = await DatabaseHelper.getDatabaseHelper();
       DateTime now = DateTime.now();
@@ -484,7 +430,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _listener(dynamic o) {
-    print("MAIN - GPS tracker update"); // - reason $reason status $status lat $lat lon $lon");
+    print(
+        "MAIN - GPS tracker update"); // - reason $reason status $status lat $lat lon $lon");
     // print("type "  + o.runtimeType.toString());
     // Map retval = o as Map;
     // print("retval type "  + retval.runtimeType.toString());
@@ -500,15 +447,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       var longitude = map["longitude"] as num;
       var accuracy = map["accuracy"] as num;
       var speed = map["speed"] as num;
-      print("COORDINATE UPDATE - latitude $latitude longitude $longitude speed $speed accuracy $accuracy fix_valid $fixValid");
+      print(
+          "COORDINATE UPDATE - latitude $latitude longitude $longitude speed $speed accuracy $accuracy fix_valid $fixValid");
     } else {
       print("FIX UPDATE - fix valid $fixValid");
     }
-
   }
 
-  Future<void> _stopTracking() async
-  {
+  Future<void> _stopTracking() async {
     if (serviceStarted && tracking) {
       GpsTracker.stopTracking();
       if (_timer != null) {
@@ -520,8 +466,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _actionsWhenTrackingStopped();
   }
 
-  Future<void> _getLocation() async
-  {
+  Future<void> _getLocation() async {
     String location;
     try {
       final result = await GpsTracker.getLocation();
@@ -529,8 +474,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       var long = result.last;
       var f = NumberFormat("#.#######", "en_UK");
       location = "Lat ${f.format(lat)} long ${f.format(long)}";
-    }
-    on PlatformException catch (e) {
+    } on PlatformException catch (e) {
       location = "Failed to get location: '${e.message}'.";
     }
     setState(() {
@@ -538,14 +482,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _getNumWalkTrackPoints() async
-  {
+  Future<void> _getNumWalkTrackPoints() async {
     String numWalkTrackPoints;
     try {
       final result = await GpsTracker.getNumWalkTrackPoints();
       numWalkTrackPoints = "There are $result track points";
-    }
-    on PlatformException catch (e) {
+    } on PlatformException catch (e) {
       numWalkTrackPoints = "Failed to get num track points: '${e.message}'.";
     }
     setState(() {
@@ -553,35 +495,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _getWalkTrackPoints() async
-  {
+  Future<void> _getWalkTrackPoints() async {
     try {
       final numPoints = await GpsTracker.getNumWalkTrackPoints();
-      final result = await GpsTracker.getWalkTrackPoints(0,numPoints);
+      final result = await GpsTracker.getWalkTrackPoints(0, numPoints);
       String resultType = result.runtimeType.toString();
       int numEntries = result.length;
-      for (final latLong in result)
-      {
+      for (final latLong in result) {
         var currentElement = latLong;
         resultType = currentElement.runtimeType.toString();
         int numElements = latLong.length;
         var lat = latLong[0];
         var lon = latLong[1];
       }
-    }
-    on PlatformException {
-    }
+    } on PlatformException {}
   }
 
-  Future<void> _getDistance() async
-  {
+  Future<void> _getDistance() async {
     String distance;
     try {
       final result = await GpsTracker.getDistance();
       final resultToPrint = result.toInt();
       distance = "Travelled $resultToPrint metres";
-    }
-    on PlatformException catch (e) {
+    } on PlatformException catch (e) {
       distance = "Failed to get distance: '${e.message}'.";
     }
     setState(() {
@@ -591,7 +527,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   void startTimer() {
     const oneSec = Duration(seconds: 1);
-    _timer = Timer.periodic(oneSec,(Timer timer) {
+    _timer = Timer.periodic(
+      oneSec,
+      (Timer timer) {
 // Put code to read stuff here
         _getNumWalkTrackPoints();
         _getLocation();
@@ -613,23 +551,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
     if (lifecycleState == AppLifecycleState.resumed) {
       GpsTracker.checkForLocationPermissionChanges();
-    } else if(lifecycleState == AppLifecycleState.paused) {
+    } else if (lifecycleState == AppLifecycleState.paused) {
       int i = 3;
     }
   }
-
 }
 
 class LoginSucessDialog extends StatefulWidget {
   final String fred;
 
-  const LoginSucessDialog({super.key,  required this.fred });
+  const LoginSucessDialog({super.key, required this.fred});
   @override
   _LoginSucessDialogState createState() => _LoginSucessDialogState();
 }
 
 class _LoginSucessDialogState extends State<LoginSucessDialog> {
-
   @override
   Widget build(BuildContext context) {
     // return Dialog(
@@ -647,7 +583,7 @@ class _LoginSucessDialogState extends State<LoginSucessDialog> {
         child: ListBody(
           children: <Widget>[
             Text(
-'In order for this application to function, it requires location tracking to be enabled, precise accuracy to be turned on, and access to all location functions. Press the SETTINGS button to open the settings window then enable all these features to continue.'),
+                'In order for this application to function, it requires location tracking to be enabled, precise accuracy to be turned on, and access to all location functions. Press the SETTINGS button to open the settings window then enable all these features to continue.'),
           ],
         ),
       ),
@@ -666,21 +602,16 @@ class _LoginSucessDialogState extends State<LoginSucessDialog> {
         ),
       ],
     );
-
-
   }
 
   contentBox(context) {
     return Stack(
       children: <Widget>[
         Container(
-
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-
               Text(widget.fred),
-
             ],
           ),
         ),

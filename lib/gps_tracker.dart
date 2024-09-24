@@ -243,7 +243,7 @@ class GpsTracker {
   static Future<void> start (
     {required String title, required String text, required String subText, required String ticker}) async {
     int status = await getCurrentLocationPermissions();
-    if (status == GRANTED) {
+    if (status == GRANTED || status == PARTLY_DENIED) {
       _methodChannel.invokeMethod('start');
     } else {
       throw Exception(ERR_NO_GPS_PERMISSIONS);

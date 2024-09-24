@@ -1,11 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 package="com.moorwen.gps_tracker">
 
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 <application>
-    <service android:name="com.moorwen.gps_tracker.GpsTrackerService" />
+    <!-- service android:name="com.moorwen.gps_tracker.GpsTrackerService" /-->
+    <service
+        android:name="com.moorwen.gps_tracker.GpsTrackerService"
+        android:foregroundServiceType="location"/>
     <!-- Don't delete the meta-data below.
          This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
     <meta-data

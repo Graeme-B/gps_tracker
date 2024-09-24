@@ -156,7 +156,7 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
             {
                 dataUpdateReceiver = new DataUpdateReceiver();
                 IntentFilter intentFilter = new IntentFilter(GpsTrackerService.LOCATION_UPDATE);
-                context.registerReceiver(dataUpdateReceiver, intentFilter);
+                context.registerReceiver(dataUpdateReceiver, intentFilter, Context.RECEIVER_EXPORTED);
             }
         }
 

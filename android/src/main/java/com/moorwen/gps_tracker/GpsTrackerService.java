@@ -1,5 +1,7 @@
 package com.moorwen.gps_tracker;
 
+import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
+
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -7,8 +9,9 @@ import android.app.Service;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ServiceInfo;
 import android.graphics.Color;
-import android.location.GpsStatus;
+import android.location.GnssStatus;
 import android.location.LocationListener;
 import android.os.BatteryManager;
 import android.os.Binder;
@@ -27,7 +30,7 @@ import android.util.Pair;
 
 import androidx.core.app.NotificationCompat;
 
-public class GpsTrackerService extends Service implements LocationListener, GpsStatus.Listener
+public class GpsTrackerService extends Service implements LocationListener// , GpsStatus.Listener
 {
     private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 1;    // 1 meter
     private static final long MIN_TIME_BW_UPDATES             = 1000; // 1 second
@@ -52,6 +55,7 @@ public class GpsTrackerService extends Service implements LocationListener, GpsS
     NotificationManager mNotifyManager;
     NotificationCompat.Builder mBuilder;
     NotificationChannel notificationChannel;
+    GpsStatus gpsStatus;
 
     String NOTIFICATION_CHANNEL_ID    = "1";
     LocationManager  locationManager  = null;
@@ -149,7 +153,7 @@ public class GpsTrackerService extends Service implements LocationListener, GpsS
         else
         {
             Intent intent = new ContextWrapper(getApplicationContext()).
-                    registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                    registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED), RECEIVER_EXPORTED);
             batteryLevel = (intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100) /
                     intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
         }
@@ -167,7 +171,9 @@ public class GpsTrackerService extends Service implements LocationListener, GpsS
         return (loc);
     }
 
-    public GpsTrackerService() { }
+    public GpsTrackerService() {
+        gpsStatus = new GpsStatus(this);
+    }
 
 //    @Override
 //    public void onCreate()
@@ -214,7 +220,13 @@ public class GpsTrackerService extends Service implements LocationListener, GpsS
                 mNotifyManager.createNotificationChannel(notificationChannel);
 
                 mBuilder.setChannelId(NOTIFICATION_CHANNEL_ID);
-                startForeground(1, mBuilder.build());
+//                if (Build.VERSION.SDK_INT >= 34) {
+//                    startForeground(1, mBuilder.build(),                            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+//                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+//                } else {
+//                    startForeground(1, mBuilder.build());
+//                }
+                  startForeground(1, mBuilder.build(),FOREGROUND_SERVICE_TYPE_LOCATION);
             }
             else
             {
@@ -442,7 +454,7 @@ public class GpsTrackerService extends Service implements LocationListener, GpsS
 
             try
             {
-                locationManager.addGpsStatusListener(this);
+                locationManager.registerGnssStatusCallback(gpsStatus);
                 if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
                 {
                     Log.d("GPSService","Requesting updates");
@@ -551,38 +563,20 @@ public class GpsTrackerService extends Service implements LocationListener, GpsS
         }
     }
 
-    /*
-     * GPS status changed - tell anyone who's listening
-     */
-    @Override
-    public void onGpsStatusChanged(int event)
-    {
-//        Log.d("GPSService", "\nonGpsStatusChanged");
-        try
-        {
-            switch (event)
-            {
-            case GpsStatus.GPS_EVENT_FIRST_FIX:
-                isGPSFix = true;
-////                ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(CHANNEL_ID, createNotification(getResources().getString(R.string.ready_to_track)));
-                broadcastFixStatus();
-                break;
-            case GpsStatus.GPS_EVENT_STOPPED:
-                isGPSFix = false;
-                broadcastFixStatus();
-                break;
-            case GpsStatus.GPS_EVENT_SATELLITE_STATUS:
-                break;
-            case GpsStatus.GPS_EVENT_STARTED:
-                break;
-            default:
-                break;
-            }
-        }
-        catch (Exception e)
-        {
-            Log.d("GPSService","onGpsStatusChanged exception " + e.getClass() + " message " + e.getMessage());
-        }
+    void gpsFirstFix(int ttffMillis) {
+        isGPSFix = true;
+        broadcastFixStatus();
+    }
+
+    void gpsStopped() {
+        isGPSFix = false;
+        broadcastFixStatus();
+    }
+
+    void gpsStarted() {
+    }
+
+    void gpsSatelliteStatus(GnssStatus status) {
     }
 
     /*
