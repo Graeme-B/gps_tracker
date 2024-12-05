@@ -1,6 +1,7 @@
 #import <Flutter/Flutter.h>
 #import <Flutter/FlutterCodecs.h>
 #import <CoreLocation/CoreLocation.h>
+#import <CoreMotion/CoreMotion.h>
 
 @interface GpsTrackerEventHandler : NSObject<FlutterStreamHandler>
 - (FlutterError* _Nullable)onListenWithArguments:(id _Nullable)arguments
@@ -15,6 +16,7 @@
 
 @interface GpsTrackerPlugin : NSObject<FlutterPlugin,CLLocationManagerDelegate>
 @property (nonatomic, strong) CLLocationManager * _Nullable locationManager;
+@property (nonatomic, strong) CMMotionManager * _Nullable motionManager;
 @property (strong) CLLocation * _Nullable position;
 
 @property (strong) NSString * _Nonnull walkName;

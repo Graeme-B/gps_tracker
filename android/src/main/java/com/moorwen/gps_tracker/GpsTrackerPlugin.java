@@ -10,6 +10,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.location.LocationManager;
+// import android.location.SensorManager;
+// import android.location.Sensor;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -240,6 +242,10 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
                 result.error("UNAVAILABLE", "Battery level not available as the service is not running.", null);
             }
             break;
+
+        case "getAttitude":
+            break;
+
         case "isLocationEnabled":
             LocationManager locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
             int enabled = LocationManagerCompat.isLocationEnabled(locationManager) ? 1 : 0;

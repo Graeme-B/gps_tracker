@@ -65,9 +65,22 @@ GpsTrackerEventHandler *trackerEventHandler;
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([@"getBatteryLevel" isEqualToString:call.method]) {
-    UIDevice *myDevice = [UIDevice currentDevice];
-    [myDevice setBatteryMonitoringEnabled:YES];
-    result(@((int)([myDevice batteryLevel]*100.0)));
+      UIDevice *myDevice = [UIDevice currentDevice];
+      [myDevice setBatteryMonitoringEnabled:YES];
+      result(@((int) ([myDevice batteryLevel] * 100.0)));
+
+  } else if ([@"getAttitude" isEqualToString:call.method]) {
+      CMMotionManager *motionManager = [[CMMotionManager alloc] init];
+      CMQuaternion q = motionManager.deviceMotion.attitude.quaternion;
+      double quat[4];
+      quat[0] = q.w;
+      quat[1] = q.x;
+      quat[2] = q.y;
+      quat[3] = q.z;
+      motionManager = nil;
+      NSData *data  = [NSData dataWithBytes: quat length: sizeof(quat)];
+      FlutterStandardTypedData* typedData = [FlutterStandardTypedData typedDataWithFloat64:data];
+      result(typedData);
   } else if ([@"isLocationEnabled" isEqualToString:call.method]) {
     int enabled = 0;
     if ([CLLocationManager locationServicesEnabled]) {
