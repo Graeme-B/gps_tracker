@@ -47,6 +47,7 @@ import static com.moorwen.gps_tracker.GpsTrackerService.LONGITUDE;
 import static com.moorwen.gps_tracker.GpsTrackerService.REASON;
 import static com.moorwen.gps_tracker.GpsTrackerService.WALK_NAME;
 import static com.moorwen.gps_tracker.GpsTrackerService.SPEED;
+import static com.moorwen.gps_tracker.GpsTrackerService.HEADING;
 import static com.moorwen.gps_tracker.GpsTrackerService.DISTANCE;
 import static com.moorwen.gps_tracker.GpsTrackerService.TIME;
 
@@ -104,6 +105,7 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
                         coordinates.put(LONGITUDE, intent.getDoubleExtra(LONGITUDE,0.0));
                         coordinates.put(ACCURACY, intent.getFloatExtra(ACCURACY,0.0f));
                         coordinates.put(SPEED, intent.getFloatExtra(SPEED,0.0f));
+                        coordinates.put(HEADING, intent.getFloatExtra(HEADING,0.0f));
                         coordinates.put(DISTANCE, intent.getDoubleExtra(DISTANCE,0.0f));
                         coordinates.put(TIME, intent.getLongExtra(TIME,0));
                         coordinates.put(FIX_VALID, true);
@@ -244,6 +246,12 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
             break;
 
         case "getAttitude":
+            break;
+
+        case "getSpeed":
+            break;
+
+        case "getBearing":
             break;
 
         case "isLocationEnabled":

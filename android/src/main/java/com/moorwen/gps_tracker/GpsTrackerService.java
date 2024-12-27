@@ -45,6 +45,7 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     static final String PROVIDER        = "provider";
     static final String DISTANCE        = "distance";
     static final String SPEED           = "speed";
+    static final String HEADING         = "heading";
     static final String TIME            = "time";
     static final String FIX_VALID       = "fix_valid";
 
@@ -420,6 +421,7 @@ public class GpsTrackerService extends Service implements LocationListener// , G
             intent.putExtra(ACCURACY, currLocation.getAccuracy());
             intent.putExtra(PROVIDER, currLocation.getProvider());
             intent.putExtra(SPEED, currLocation.getSpeed());
+            intent.putExtra(HEADING,currLocation.getBearing());
         }
         intent.putExtra(DISTANCE, distance);
         intent.putExtra(TIME, elapsedTime);

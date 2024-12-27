@@ -125,7 +125,6 @@ GpsTrackerEventHandler *trackerEventHandler;
       _distance = 0;
       _position = nil;
       _paused = false;
-      _paused = false;
   } else if ([@"stopTracking" isEqualToString:call.method]) {
       _walkName = nil;
   } else if ([@"getLocation" isEqualToString:call.method]) {
@@ -287,6 +286,7 @@ GpsTrackerEventHandler *trackerEventHandler;
   coordinates[@"longitude"] = [NSNumber numberWithDouble:location.coordinate.longitude];
   coordinates[@"accuracy"] = [NSNumber numberWithDouble:location.horizontalAccuracy];
   coordinates[@"speed"] = [NSNumber numberWithDouble:location.speed];
+  coordinates[@"heading"] = [NSNumber numberWithDouble:location.course];
   coordinates[@"distance"] = [NSNumber numberWithDouble:distance];
   coordinates[@"fix_valid"] = [NSNumber numberWithBool:true];
   _eventSink(coordinates);

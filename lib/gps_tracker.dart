@@ -212,12 +212,12 @@ class GpsTracker {
 
       Map map = o as Map;
 
+      map.forEach((k, v) => print("Key : $k, Value : $v"));
+
       var reason = map["reason"];
       if (reason == "COORDINATE_UPDATE") {
         var walkName = map["walk_name"];
-        if (walkName != null && walkName
-            .toString()
-            .length > 0) {
+        if (walkName != null && walkName.toString().isNotEmpty) {
           List<WalkTrackPoint> waypoints = [];
           WalkTrackPoint wtp = new WalkTrackPoint(
               create_date: DateFormat('dd-MM-yyyy – hh:mm:ss').format(
@@ -225,6 +225,8 @@ class GpsTracker {
               latitude: map["latitude"] as double,
               longitude: map["longitude"] as double,
               distance: map["distance"] as double,
+              speed: map["speed"] as double,
+              heading: map["heading"]  as double,
               provider: "gps",
               accuracy: map["accuracy"] as double,
               elapsed_time: 0);
