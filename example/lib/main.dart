@@ -8,6 +8,50 @@ import 'package:gps_tracker/gps_tracker.dart';
 import 'package:gps_tracker_db/gps_tracker_db.dart';
 import 'package:intl/intl.dart';
 
+/**
+ * So, how does this all hang together?
+ *
+ * Android:
+ *  1) There's a service - GpsTrackerService - which runs all the time.
+ *     This runs as a foreground service (needed so it isn't swapped out)
+ *     It needs a notification channel for this, so the user knows it's running
+ *     It's started from the plugin
+ *     It communicates with the plugin by sending broadcasts
+ *  2) There's a plugin - GpsTrackerPlugin - which runs when the app runs
+ *     This starts and stops the service on command
+ *     It receives the braodcasts from the service
+ *     It communicates with the Dart code via channels
+ *      METHOD CHANNEL sends commands
+ *      EVENT CHANNEL receives messages
+ *     so, when it receives a broadcast event, it sends a message to the Dart code via an event channel
+ *     and the Dart code sends it commands via the method channel
+ *
+ * IOS:
+ *
+ * Dart code:
+ *   gps_tracker.dart communicates with the native code using channels
+ *      METHOD CHANNEL sends commands
+ *      EVENT CHANNEL receives messages
+ *   This also checks permissions to make sure we can use the location
+ *
+ *   To use the app, you need to check permissions (GpsTracker.getCurrentLocationPermissions)
+ *   request them if necessary (GpsTracker.requestLocationPermissions)
+ *   start the service (GpsTracker.start)
+ *   start tracking (GpsTracker.startTracking)
+ *   stop tracking (GpsTracker.stopTracking)
+ *   stop the service (GpsTracker.stop)
+ *
+ *   You can pause and resume tracking with GpsTracker.pauseTracking and GpsTracker.resumeTracking
+ *   There are various other functions
+ *     GpsTracker.getNumWalkTrackPoints
+ *     GpsTracker.getDistance
+ *     GpsTracker.getWalkName
+ *   and the main function, GpsTracker.getWalkTrackPoints, which retrieves the acutal data
+ *
+ *   When tracking, the gps_tracker dart code adds track points to the database
+ *   (not sure how this works when the foreground app is switched out, but it does!)
+ */
+
 final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() => runApp(
@@ -338,7 +382,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _startService() async {
     if (!serviceStarted) {
-      GpsTracker.addGpsListener(_listener);
+      GpsTracker.addGpsListener(_GPSlistener);
+     GpsTracker.addAccelerometerListener(_accelerometerListener);
       await GpsTracker.start(
         title: "GPS Tracker",
         text: "Text",
@@ -352,7 +397,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _stopService() async {
     if (serviceStarted) {
-      GpsTracker.removeGpsListener(_listener);
+      GpsTracker.removeGpsListener(_GPSlistener);
+      GpsTracker.removeAccelerometerListener(_accelerometerListener);
       GpsTracker.stop();
       serviceStarted = false;
     }
@@ -429,9 +475,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _actionsWhenTrackingStarted();
   }
 
-  void _listener(dynamic o) {
-    print(
-        "MAIN - GPS tracker update"); // - reason $reason status $status lat $lat lon $lon");
+  void _GPSlistener(dynamic o) {
+    print("MAIN - GPS tracker update"); // - reason $reason status $status lat $lat lon $lon");
     // print("type "  + o.runtimeType.toString());
     // Map retval = o as Map;
     // print("retval type "  + retval.runtimeType.toString());
@@ -447,11 +492,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       var longitude = map["longitude"] as num;
       var accuracy = map["accuracy"] as num;
       var speed = map["speed"] as num;
-      print(
-          "COORDINATE UPDATE - latitude $latitude longitude $longitude speed $speed accuracy $accuracy fix_valid $fixValid");
+      print("COORDINATE UPDATE - latitude $latitude longitude $longitude speed $speed accuracy $accuracy fix_valid $fixValid");
     } else {
       print("FIX UPDATE - fix valid $fixValid");
     }
+  }
+
+  void _accelerometerListener(dynamic o) {
+    print("MAIN - Accelerometer update");
+    // print("type "  + o.runtimeType.toString());
+    // Map retval = o as Map;
+    // print("retval type "  + retval.runtimeType.toString());
+    // retval.forEach((k,v) {
+    //   print("k type " + k.runtimeType.toString() + " v type " + v.runtimeType.toString());
+    //   print("k $k v $v");
+    // });
+    Map map = o as Map;
+    var reason = map["reason"];
+    var x = map["accelerometerX"] as num;
+    var y = map["accelerometerY"] as num;
+    var z = map["accelerometerZ"] as num;
+    print("ACCELEROMETER UPDATE - x $x y $y z $z");
   }
 
   Future<void> _stopTracking() async {

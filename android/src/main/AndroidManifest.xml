@@ -5,6 +5,7 @@ package="com.moorwen.gps_tracker">
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+<uses-feature android:name="android.hardware.sensor.accelerometer" />
 <application>
     <!-- service android:name="com.moorwen.gps_tracker.GpsTrackerService" /-->
     <service

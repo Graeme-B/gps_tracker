@@ -10,6 +10,7 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
+import android.content.Context;
 import android.graphics.Color;
 import android.location.GnssStatus;
 import android.location.LocationListener;
@@ -20,6 +21,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +35,7 @@ import android.util.Pair;
 
 import androidx.core.app.NotificationCompat;
 
-public class GpsTrackerService extends Service implements LocationListener// , GpsStatus.Listener
+public class GpsTrackerService extends Service implements LocationListener, SensorEventListener// , GpsStatus.Listener
 {
     private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 1;    // 1 meter
     private static final long MIN_TIME_BW_UPDATES             = 1000; // 1 second
@@ -48,6 +53,12 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     static final String HEADING         = "heading";
     static final String TIME            = "time";
     static final String FIX_VALID       = "fix_valid";
+
+    static final String ACCELEROMETER_UPDATE    = "com.moorwen.coursewalker.AccelerometerUpdate";
+    static final String ACCELEROMETER_X         = "accelerometerX";
+    static final String ACCELEROMETER_Y         = "accelerometerY";
+    static final String ACCELEROMETER_Z         = "accelerometerZ";
+    static final String ACCELEROMETER_TIMESTAMP = "accelerometerTimestamp";
 
     static final int COORDINATE_UPDATE = 0;
     static final int GPS_FIX_VALID     = 3;
@@ -68,22 +79,21 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     private long     elapsedTime      = 0;
     private long     prevTime         = 0;
     private boolean  isGPSFix         = false;
+
     private final ArrayList<Pair<Double,Double>> walkTrack = new ArrayList<>();
+    private float mSensorX;
+    private float mSensorY;
+    private float mSensorZ;
+    private long mSensorTimeStamp;
+    private SensorManager mSensorManager;
+    private Sensor mAccelerometer;
 
     /*
      * Methods to get some of the internal variables
      */
-//    public Location getLocation()   { return(currLocation); }
-    public double                    getDistance()           { return (distance); }
-    public String                    getWalkName()           { return (walkName); }
-//    public long                      getElapsedTime()        { return (elapsedTime); }
-//    public boolean                   isPaused()              { return(paused); }
-//    public boolean                   isTracking()            { return(tracking); }
-//    public List<Pair<Double,Double>> getWalkTrack()          { return(walkTrack); }
-//    public boolean                   isFixValid()            { return(isGPSFix);}
-//    public int                       timeSinceLastFix()      { return(timeSinceLastFix/1000);}
-//    public boolean                   setFromLastLoc()        { return(setFromLastLoc);}
-    public int                       getNumWalkTrackPoints() { return(walkTrack.size());}
+    public double getDistance()           { return (distance); }
+    public String getWalkName()           { return (walkName); }
+    public int    getNumWalkTrackPoints() { return(walkTrack.size());}
 
     public List<double[]> getWalkTrackPoints(int start, int end)
     {
@@ -125,7 +135,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
             }
         }
     };
-
 
     /*
      * Class used for the client Binder.  Because we know this service always
@@ -176,15 +185,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
         gpsStatus = new GpsStatus(this);
     }
 
-//    @Override
-//    public void onCreate()
-//    {
-//        super.onCreate();
-//
-//        Log.d("GPSService", "OnCreate... \n");
-//
-//    }
-
     @Override
     public int onStartCommand(Intent intent, int flags, int startId)
     {
@@ -199,8 +199,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
             mBuilder.setContentTitle("My App")
                     .setContentText("Always running...")
                     .setTicker("Always running...")
-//                    .setSmallIcon(R.mipmap.ic_launcher)
-//                .setLargeIcon(IconLg)
                     .setPriority(Notification.PRIORITY_HIGH)
                     .setVibrate(new long[]{1000})
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -221,12 +219,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
                 mNotifyManager.createNotificationChannel(notificationChannel);
 
                 mBuilder.setChannelId(NOTIFICATION_CHANNEL_ID);
-//                if (Build.VERSION.SDK_INT >= 34) {
-//                    startForeground(1, mBuilder.build(),                            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-//                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
-//                } else {
-//                    startForeground(1, mBuilder.build());
-//                }
                   startForeground(1, mBuilder.build(),FOREGROUND_SERVICE_TYPE_LOCATION);
             }
             else
@@ -238,7 +230,7 @@ public class GpsTrackerService extends Service implements LocationListener// , G
         }
         else if (intent.getAction().equals( GpsTrackerPlugin.STOPFOREGROUND_ACTION)) {
             Log.d("GPSService", "Stop");
-            //your end servce code
+            //your end service code
             stopForeground(true);
             if (mNotifyManager != null) {
                 mNotifyManager.cancelAll();
@@ -249,19 +241,9 @@ public class GpsTrackerService extends Service implements LocationListener// , G
         return START_STICKY;
     }
 
-//    @Override
-//    public void onDestroy()
-//    {
-//        Log.d("GPSService", "\nDestroyed....");
-//        super.onDestroy();
-//    }
-
-
     @Override
     public IBinder onBind(Intent intent)
     {
-//        mainActivityClass = (Class)intent.getSerializableExtra("MainActivityClass");
-//        return mBinder;
         return new LocalBinder();
     }
 
@@ -271,19 +253,10 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     public void startTracking(String walkName)
     {
         Log.d("GPSService", "\nstartTracking - walk name " + walkName);
-        paused      = false;
-        distance    = 0.0;
-        elapsedTime = 0;
+        paused        = false;
+        distance      = 0.0;
+        elapsedTime   = 0;
         prevTime      = System.currentTimeMillis();
-//        try
-//        {
-//            myDb.addWalk(walkName);
-//        }
-//        catch (Exception e)
-//        {
-//            Log.d("GPSService","GPSTracker startTracking exception " + e.getClass().toString() + " message " + e.getMessage());
-//        }
-
         this.walkName = walkName;
         paused        = false;
         distance      = 0.0;
@@ -300,27 +273,7 @@ public class GpsTrackerService extends Service implements LocationListener// , G
             {
             }
         }
-//        if (currLocation != null)
-//        {
-//            try
-//            {
-//                myDb.addWalkTrackPoint(walkName,
-//                        new WalkTrackPoint(new Pair<>(currLocation.getLatitude(), currLocation.getLongitude()),
-//                                distance, elapsedTime, currLocation.getProvider(), currLocation.getAccuracy()));
-//                walkTrack.add(new Pair<>(currLocation.getLatitude(), currLocation.getLongitude()));
-//            }
-//            catch (NonExistentWalkException e)
-//            {
-//                Log.d("GPSService","GPSTracker startTracking Non existent walk " + walkName);
-//            }
-//        }
         tracking = true;
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-//        {
-//            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(CHANNEL_ID, createNotification(getResources().getString(R.string.tracking)));
-//            startForeground(CHANNEL_ID, createNotification(getResources().getString(R.string.tracking)));
-//        }
-
         timerHandler.postDelayed(timerRunnable, 0);
     }
 
@@ -332,12 +285,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
         Log.d("GPSService", "\nstopTracking");
         tracking = false;
         walkName = null;
-//        paused   = false;
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-//        {
-//            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(CHANNEL_ID, createNotification(getResources().getString(R.string.ready_to_track)));
-//            stopForeground(STOP_FOREGROUND_REMOVE);
-//        }
         timerHandler.removeCallbacks(timerRunnable);
     }
 
@@ -347,8 +294,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     public void pauseTracking()
     {
         paused = true;
-//        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(CHANNEL_ID, createNotification(getResources().getString(R.string.paused)));
-////        timerHandler.removeCallbacks(timerRunnable);
     }
 
     /*
@@ -357,44 +302,7 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     public void resumeTracking()
     {
         paused   = false;
-//        prevTime = System.currentTimeMillis();
-//        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(CHANNEL_ID, createNotification(getResources().getString(R.string.tracking)));
-////        timerHandler.postDelayed(timerRunnable, 0);
     }
-
-    /*
-     * Called if we're switched out
-     */
-//    public void appPaused()
-//    {
-//        Logger.logDebug(String.format("GPSTracker paused - tracking %b",tracking));
-//        if (!tracking)
-//        {
-//            locationManager.removeUpdates(GPSTracker.this);
-//        }
-//    }
-
-    /*
-     * Called when we're switched back in
-     */
-//    public void appResumed()
-//    {
-//        Logger.logDebug(String.format("GPSTracker resumed - tracking %b",tracking));
-//        if (!tracking)
-//        {
-//            try
-//            {
-//                locationManager.addGpsStatusListener(this);
-//                locationManager.requestLocationUpdates(
-//                        LocationManager.GPS_PROVIDER,
-//                        MIN_TIME_BW_UPDATES,
-//                        MIN_DISTANCE_CHANGE_FOR_UPDATES, this);
-//            }
-//            catch (SecurityException e)
-//            {
-//            }
-//        }
-//    }
 
     /*
      * Broadcasts the new location
@@ -402,12 +310,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     private void broadcastLocationChange()
     {
         Log.d("GPSService", "\nbroadcastLocationChange");
-
-//        double speed = 0.0;
-//        if (elapsedTime > 0)
-//        {
-//            speed = (distance / elapsedTime) * 60000.0;
-//        }
 
         Intent intent = new Intent();
         intent.setAction(LOCATION_UPDATE);
@@ -442,6 +344,22 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     }
 
     /*
+     * Broadcast an accelerometer change message
+     */
+    private void broadcastAccelerometerChange()
+    {
+        Intent intent = new Intent();
+        intent.setAction(ACCELEROMETER_UPDATE);
+        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+        intent.putExtra(ACCELEROMETER_X,mSensorX);
+        intent.putExtra(ACCELEROMETER_Y,mSensorY);
+        intent.putExtra(ACCELEROMETER_Z,mSensorZ);
+        intent.putExtra(ACCELEROMETER_TIMESTAMP,mSensorTimeStamp);
+        Log.d("GPSService","Broadcast accelerometer change");
+        sendBroadcast(intent);
+    }
+
+    /*
      * onCreate
      */
     @Override
@@ -449,11 +367,13 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     {
         super.onCreate();
         Log.d("GPSService","onCreate");
-//        myDb = DBHelper.getInstance(this);
         try
         {
-            locationManager = (LocationManager) getApplicationContext().getSystemService(LOCATION_SERVICE);
+            mSensorManager = (SensorManager) getApplicationContext().getSystemService(Context.SENSOR_SERVICE);
+            mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_UI);
 
+            locationManager = (LocationManager) getApplicationContext().getSystemService(LOCATION_SERVICE);
             try
             {
                 locationManager.registerGnssStatusCallback(gpsStatus);
@@ -477,10 +397,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
             {
             }
 
-//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-//            {
-//                startForeground(CHANNEL_ID, createNotification(getResources().getString(R.string.waiting_for_gps)));
-//            }
         }
         catch (Exception e)
         {
@@ -494,8 +410,8 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     @Override
     public void onDestroy()
     {
+        mSensorManager.unregisterListener(this);
         super.onDestroy();
-//        Logger.logDebug("GPSTracker onDestroy");
     }
 
     /*
@@ -524,38 +440,16 @@ public class GpsTrackerService extends Service implements LocationListener// , G
                         {
                             d = location.distanceTo(currLocation);
                         }
-//                        if (d > location.getAccuracy())
-//                        {
                         distance += d;
-//                        try
-//                        {
-//                            myDb.addWalkTrackPoint(walkName,
-//                                    new WalkTrackPoint(new Pair<>(location.getLatitude(), location.getLongitude()),
-//                                            distance, elapsedTime, location.getProvider(), location.getAccuracy()));
-//                        }
-//                        catch (NonExistentWalkException e)
-//                        {
-//                            Log.d("GPSService","GPSTracker onLocationChanged Non existent walk " + walkName);
-//                        }
                         walkTrack.add(new Pair<>(location.getLatitude(), location.getLongitude()));
                     }
                 }
                 broadcastLocationChange();
-//
-//                if (setFromLastLoc)
-//                {
-//                    setFromLastLoc = false;
-//                    double d = location.distanceTo(currLocation);
-//                    Logger.logInfo(String.format("GPSTracker - set from last loc - distance %2.5f",d));
-//                }
                 currLocation = location;
-//                prevFixTime  = SystemClock.elapsedRealtime();
             }
-            //Logger.logDebug("GPS onLocation changed - provider " + location.getProvider() + " accuracy " + location.getAccuracy());
         }
         catch (SecurityException e)
         {
-            //Logger.logDebug("GPSTracker onLocationChanged exception " + e.getClass().toString() + " message " + e.getMessage());
             Log.d("GPSService","onLocationChanged securtyException message " + e.getMessage());
 
         }
@@ -586,14 +480,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
      */
     @Override
     public void onProviderDisabled(String provider) {
-//        Logger.logDebug("GPSTracker onProviderDisabled");
-//
-//        Intent intent = new Intent();
-//        intent.setAction(LOCATION_UPDATE);
-//        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-//        intent.putExtra(REASON, GPS_DISABLED);
-//        sendBroadcast(intent);
     }
 
     /*
@@ -602,11 +488,6 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     @Override
     public void onProviderEnabled(String provider)
     {
-//        Intent intent = new Intent();
-//        intent.setAction(LOCATION_UPDATE);
-//        intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-//        intent.putExtra(REASON, GPS_ENABLED);
-//        sendBroadcast(intent);
     }
 
     /*
@@ -616,22 +497,23 @@ public class GpsTrackerService extends Service implements LocationListener// , G
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras)
     {
-//        String newStatus;
-//        switch (status)
-//        {
-//        case LocationProvider.AVAILABLE:
-//            newStatus = "AVAILABLE";
-//            break;
-//        case LocationProvider.TEMPORARILY_UNAVAILABLE:
-//            newStatus = "TEMPORARILY UNAVAILABLE";
-//            break;
-//        case LocationProvider.OUT_OF_SERVICE:
-//            newStatus = "OUT OF SERVICE";
-//            break;
-//        default:
-//            newStatus = "UNKNOWN - VALUE " + status;
-//            break;
-//        }
-//        //Logger.logDebug("GPSTracker onStatusChanged - provider " + provider + " new status " + newStatus);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER)
+            return;
+
+        mSensorX = event.values[0];
+        mSensorY = event.values[1];
+        mSensorZ = event.values[2];
+        mSensorTimeStamp = event.timestamp;
+
+        Log.d("GPSService",String.format("onSensorChanged - x %3f y %3f z %3f", mSensorX, mSensorY, mSensorZ));
+        broadcastAccelerometerChange();
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
     }
 }

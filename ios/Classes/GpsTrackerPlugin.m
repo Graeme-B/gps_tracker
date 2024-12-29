@@ -170,7 +170,7 @@ GpsTrackerEventHandler *trackerEventHandler;
         return;
     }
    
-//    NSLog(@"didUpdateLocations called");
+    NSLog(@"GPSTracker - didUpdateLocations called");
     bool first = true;
     for (CLLocation *location in locations)
     {
@@ -179,8 +179,8 @@ GpsTrackerEventHandler *trackerEventHandler;
         {
             distance = [ _position distanceFromLocation:location];
         }
-//        NSLog(@"didUpdateLocations distance %6.2f lat %6.6f lon %6.6f accuracy %6.6f",
-//          distance,location.coordinate.latitude,location.coordinate.longitude,location.horizontalAccuracy);
+        NSLog(@"GPSTracker - didUpdateLocations distance %6.2f lat %6.6f lon %6.6f accuracy %6.6f",
+          distance,location.coordinate.latitude,location.coordinate.longitude,location.horizontalAccuracy);
 
         if (first && _position == nil)
         {
@@ -211,20 +211,20 @@ GpsTrackerEventHandler *trackerEventHandler;
     switch (status)
     {
     case kCLAuthorizationStatusNotDetermined:
-        NSLog(@"Status not determined");
+        NSLog(@"GPSTracker - Status not determined");
         break;
     // The user denied authorization
     case kCLAuthorizationStatusDenied:
-        NSLog(@"Status denied");
+        NSLog(@"GPSTracker - Status denied");
         break;
     case kCLAuthorizationStatusRestricted:
-        NSLog(@"Status restricted");
+        NSLog(@"GPSTracker - Status restricted");
         break;
     case kCLAuthorizationStatusAuthorizedAlways:
-        NSLog(@"Status authorised always");
+        NSLog(@"GPSTracker - Status authorised always");
         break;
     case kCLAuthorizationStatusAuthorizedWhenInUse:
-        NSLog(@"Status authorised when in use");
+        NSLog(@"GPSTracker - Status authorised when in use");
         break;
 //    default:
 //        break;
@@ -255,19 +255,19 @@ GpsTrackerEventHandler *trackerEventHandler;
 //}
 
 - (FlutterError*)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)eventSink {
-  NSLog(@"onListenWithArguments");
+  NSLog(@"GPSTracker - onListenWithArguments");
   _eventSink = eventSink;
   return nil;
 }
 
 - (FlutterError*)onCancelWithArguments:(id)arguments {
-  NSLog(@"onCancelWithArguments");
+  NSLog(@"GPSTracker - onCancelWithArguments");
   _eventSink = nil;
   return nil;
 }
 
 - (void)updateStatus:(int)status {
-  NSLog(@"Update status");
+  NSLog(@"GPSTracker - Update status");
   if (_eventSink == nil) return;
 
   NSMutableDictionary *fix = [NSMutableDictionary dictionaryWithCapacity:2];

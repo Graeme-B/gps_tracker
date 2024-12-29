@@ -39,6 +39,9 @@ class GpsTracker {
   static const EventChannel _gpsTrackerEventChannel = const EventChannel(
       'com.moorwen.flutter.gps_tracker/gps_tracker_event_channel');
   static StreamSubscription? gpsTrackerStreamSubscription;   // ignore: cancel_subscriptions
+  static const EventChannel _accelerometerEventChannel = const EventChannel(
+      'com.moorwen.flutter.gps_tracker/accelerometer_event_channel');
+  static StreamSubscription? accelerometerStreamSubscription;   // ignore: cancel_subscriptions
   static int tracking = TRACKING_OFF;
 
   // Testing and information
@@ -206,6 +209,17 @@ class GpsTracker {
     eventChannelStreamSubscription = null;
   }
 
+  static Future<void> addAccelerometerListener(_listener) async {
+    var s = _accelerometerEventChannel.receiveBroadcastStream();
+    accelerometerStreamSubscription = s.listen(_listener);
+  }
+
+  static Future<void> removeAccelerometerListener(_listener) async {
+    if (accelerometerStreamSubscription != null)
+      accelerometerStreamSubscription!.cancel();
+    accelerometerStreamSubscription = null;
+  }
+
   static void _listener(dynamic o) async {
     if (tracking == TRACKING) {
       var db = await DatabaseHelper.getDatabaseHelper();
@@ -220,8 +234,7 @@ class GpsTracker {
         if (walkName != null && walkName.toString().isNotEmpty) {
           List<WalkTrackPoint> waypoints = [];
           WalkTrackPoint wtp = new WalkTrackPoint(
-              create_date: DateFormat('dd-MM-yyyy – hh:mm:ss').format(
-                  DateTime.now()),
+              create_date: DateFormat('dd-MM-yyyy – hh:mm:ss').format(DateTime.now()),
               latitude: map["latitude"] as double,
               longitude: map["longitude"] as double,
               distance: map["distance"] as double,

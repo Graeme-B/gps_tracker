@@ -10,8 +10,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.location.LocationManager;
-// import android.location.SensorManager;
-// import android.location.Sensor;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -50,6 +48,13 @@ import static com.moorwen.gps_tracker.GpsTrackerService.SPEED;
 import static com.moorwen.gps_tracker.GpsTrackerService.HEADING;
 import static com.moorwen.gps_tracker.GpsTrackerService.DISTANCE;
 import static com.moorwen.gps_tracker.GpsTrackerService.TIME;
+import static com.moorwen.gps_tracker.GpsTrackerService.LOCATION_UPDATE;
+import static com.moorwen.gps_tracker.GpsTrackerService.REASON;
+import static com.moorwen.gps_tracker.GpsTrackerService.ACCELEROMETER_UPDATE;
+import static com.moorwen.gps_tracker.GpsTrackerService.ACCELEROMETER_X;
+import static com.moorwen.gps_tracker.GpsTrackerService.ACCELEROMETER_Y;
+import static com.moorwen.gps_tracker.GpsTrackerService.ACCELEROMETER_Z;
+import static com.moorwen.gps_tracker.GpsTrackerService.ACCELEROMETER_TIMESTAMP;
 
 /**
  * GpsTrackerPlugin
@@ -64,6 +69,7 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
     public static final String METHOD_CHANNEL         = "com.moorwen.flutter.gps_tracker/method_channel";
     public static final String EVENT_CHANNEL          = "com.moorwen.flutter.gps_tracker/event_channel";
     public static final String TRACKER_EVENT_CHANNEL  = "com.moorwen.flutter.gps_tracker/gps_tracker_event_channel";
+    public static final String ACCELEROMETER_EVENT_CHANNEL  = "com.moorwen.flutter.gps_tracker/accelerometer_event_channel";
     public static       String STARTFOREGROUND_ACTION = "com.moorwen.flutter.gps_tracker.action.startforeground";
     public static       String STOPFOREGROUND_ACTION  = "com.moorwen.flutter.gps_tracker.action.stopforeground";
 
@@ -74,10 +80,12 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
     private MethodChannel      methodChannel       = null;
     private EventChannel       eventChannel        = null;
     private EventChannel       trackerEventChannel = null;
+    private EventChannel       accelerometerEventChannel = null;
 
     // Listeners
     EventChannel.EventSink listener;
     EventChannel.EventSink trackerListener;
+    EventChannel.EventSink accelerometerListener;
 
     /*
      * Class to receive updates from the GPS service
@@ -87,13 +95,12 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
         @Override
         public void onReceive(Context context, Intent intent)
         {
-            Log.d("GPSTrackerPlugin","onReceive");
+            Log.d("GPSPlugin","onReceive - action " + intent.getAction());
             try
             {
-                if (GpsTrackerService.LOCATION_UPDATE.equals(intent.getAction()))
+                if (LOCATION_UPDATE.equals(intent.getAction()))
                 {
-                    Log.d("GPSTrackerPlugin","locationUpdate");
-                    int reason = intent.getIntExtra(GpsTrackerService.REASON, -1);
+                    int reason = intent.getIntExtra(REASON, -1);
                     switch (reason)
                     {
                     case COORDINATE_UPDATE:
@@ -111,10 +118,6 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
                         coordinates.put(FIX_VALID, true);
                         if (listener != null) listener.success(coordinates);
                         if (trackerListener != null) trackerListener.success(coordinates);
-//                        for (Map.Entry<Object, EventChannel.EventSink> entry : listeners.entrySet())
-//                        {
-//                            entry.getValue().success(coordinates);
-//                        }
                         break;
                     case GPS_FIX_VALID:
                         Log.d("GPSPlugin","Received fix valid");
@@ -123,15 +126,21 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
                         fixStatus.put(FIX_VALID, true);
                         if (listener != null) listener.success(fixStatus);
                         if (trackerListener != null) trackerListener.success(fixStatus);
-//                        for (Map.Entry<Object, EventChannel.EventSink> entry : listeners.entrySet())
-//                        {
-//                            entry.getValue().success(fixStatus);
-//                        }
                         break;
                     default:
                         break;
                     }
+                } else if (ACCELEROMETER_UPDATE.equals(intent.getAction())) {
+                    Log.d("GPSPlugin","Received accelerometer update");
+                    Map<String,Object> attitude = new HashMap<>();
+                    attitude.put(REASON, "ACCELEROMETER_UPDATE");
+                    attitude.put(ACCELEROMETER_X, intent.getFloatExtra(ACCELEROMETER_X,0.0F));
+                    attitude.put(ACCELEROMETER_Y, intent.getFloatExtra(ACCELEROMETER_Y,0.0F));
+                    attitude.put(ACCELEROMETER_Z, intent.getFloatExtra(ACCELEROMETER_Z,0.0F));
+                    attitude.put(ACCELEROMETER_TIMESTAMP, intent.getLongExtra(ACCELEROMETER_TIMESTAMP,0));
+                    if (accelerometerListener != null) accelerometerListener.success(attitude);
                 }
+
             }
             catch (Exception e)
             {
@@ -151,7 +160,6 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
                                        IBinder service)
         {
             // We've bound to LocalService, cast the IBinder and get LocalService instance
-//            ForegroundService.LocalBinder binder = (ForegroundService.LocalBinder) service;
             Log.d("GPSPlugin", "\nConnect");
             GpsTrackerService.LocalBinder binder = (GpsTrackerService.LocalBinder) service;
             mService                             = binder.getService();
@@ -159,7 +167,9 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
             if (dataUpdateReceiver == null)
             {
                 dataUpdateReceiver = new DataUpdateReceiver();
-                IntentFilter intentFilter = new IntentFilter(GpsTrackerService.LOCATION_UPDATE);
+                IntentFilter intentFilter = new IntentFilter();
+                intentFilter.addAction(LOCATION_UPDATE);
+                intentFilter.addAction(ACCELEROMETER_UPDATE);
                 context.registerReceiver(dataUpdateReceiver, intentFilter, Context.RECEIVER_EXPORTED);
             }
         }
@@ -215,6 +225,22 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
                     }
                 }
         );
+        accelerometerEventChannel = new EventChannel(flutterPluginBinding.getBinaryMessenger(),ACCELEROMETER_EVENT_CHANNEL);
+        accelerometerEventChannel.setStreamHandler(
+                new EventChannel.StreamHandler() {
+                    @Override
+                    public void onListen(Object listener, final EventChannel.EventSink eventSink) {
+                        Log.d("GPSPlugin", "adding accelerometer listener");
+                        accelerometerListener = eventSink;
+                    }
+
+                    @Override
+                    public void onCancel(Object listener) {
+                        Log.d("GPSPlugin", "cancelling accelerometer listener");
+                        accelerometerListener = null;
+                    }
+                }
+        );
     }
 
     @Override
@@ -263,31 +289,22 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
             result.success(0);
             break;
         case "start":
-// https://stackoverflow.com/questions/20857120/what-is-the-proper-way-to-stop-a-service-running-as-foreground
-//start
-//            Intent startIntent = new Intent(MainActivity.this, ForegroundService.class);
-//            startIntent.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);
-//            startService(startIntent);
-//stop
-//            Intent stopIntent = new Intent(MainActivity.this, ForegroundService.class);
-//            stopIntent.setAction(Constants.ACTION.STOPFOREGROUND_ACTION);
-//            startService(stopIntent);
+/*
+ https://stackoverflow.com/questions/20857120/what-is-the-proper-way-to-stop-a-service-running-as-foreground
+ start
+   Intent startIntent = new Intent(MainActivity.this, ForegroundService.class);
+   startIntent.setAction(Constants.ACTION.STARTFOREGROUND_ACTION);
+   startService(startIntent);
+ stop
+   Intent stopIntent = new Intent(MainActivity.this, ForegroundService.class);
+   stopIntent.setAction(Constants.ACTION.STOPFOREGROUND_ACTION);
+   startService(stopIntent);
+*/
             Intent startIntent = new Intent(context, GpsTrackerService.class);
             startIntent.setAction(STARTFOREGROUND_ACTION);
             context.startService(startIntent);
             context.bindService(startIntent, mConnection, Context.BIND_AUTO_CREATE);
 
-//            Intent intent = new Intent(context, GpsTrackerService.class);
-//            intent.setAction(STARTFOREGROUND_ACTION);
-//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-//            {
-//                context.startForegroundService(intent);
-//            }
-//            else
-//            {
-//                context.startService(intent);
-//            }
-//            context.bindService(startIntent, mConnection, Context.BIND_AUTO_CREATE);
             result.success(null);
         break;
         case "stop":
@@ -295,18 +312,6 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
             stopIntent.setAction(STOPFOREGROUND_ACTION);
             context.startService(stopIntent);
 
-//            Intent stopIntent = new Intent(context, GpsTrackerService.class);
-//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-//            {
-//                stopIntent.setAction(STOPFOREGROUND_ACTION);
-//                context.unbindService(mConnection);
-//                context.startService(stopIntent);
-//            }
-//            else
-//            {
-//                context.unbindService(mConnection);
-//                context.stopService(stopIntent);
-//            }
             break;
         case "startTracking":
             if (mService != null)
@@ -384,7 +389,6 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
                     end = -1;
                 }
                 result.success(mService.getWalkTrackPoints(start, end));
-//                result.success(mService.getWalkTrackPoints((int) call.argument("start"),(int) call.argument("end")));
             }
             else
             {
@@ -423,49 +427,59 @@ public class GpsTrackerPlugin implements FlutterPlugin, MethodCallHandler, Activ
         methodChannel.setMethodCallHandler(null);
         eventChannel.setStreamHandler(null);
         trackerEventChannel.setStreamHandler(null);
+        accelerometerEventChannel.setStreamHandler(null);
     }
 
+    /**
+     * Your plugin is now associated with an Android Activity.
+     *
+     * If this method is invoked, it is always invoked after
+     * onAttachedToFlutterEngine().
+     *
+     * You can obtain an Activity reference with
+     * binding.getActivity()
+     *
+     * You can listen for Lifecycle changes with
+     * binding.getLifecycle()
+     *
+     * You can listen for Activity results, new Intents, user
+     * leave hints, and state saving callbacks by using the
+     * appropriate methods on the binding.
+     */
     @Override
     public void onAttachedToActivity(ActivityPluginBinding binding) {
         activity = binding.getActivity();
-        // Your plugin is now associated with an Android Activity.
-        //
-        // If this method is invoked, it is always invoked after
-        // onAttachedToFlutterEngine().
-        //
-        // You can obtain an Activity reference with
-        // binding.getActivity()
-        //
-        // You can listen for Lifecycle changes with
-        // binding.getLifecycle()
-        //
-        // You can listen for Activity results, new Intents, user
-        // leave hints, and state saving callbacks by using the
-        // appropriate methods on the binding.
     }
 
+    /**
+     * The Activity your plugin was associated with has been
+     * destroyed due to config changes. It will be right back
+     * but your plugin must clean up any references to that
+     * Activity and associated resources.
+     */
     @Override
     public void onDetachedFromActivityForConfigChanges() {
         activity = null;
-        // The Activity your plugin was associated with has been
-        // destroyed due to config changes. It will be right back
-        // but your plugin must clean up any references to that
-        // Activity and associated resources.
     }
 
+    /**
+     * Your plugin is now associated with a new Activity instance
+     * after config changes took place. You may now re-establish
+     * a reference to the Activity and associated resources.
+     */
     @Override
     public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
         activity = binding.getActivity();
-        // Your plugin is now associated with a new Activity instance
-        // after config changes took place. You may now re-establish
-        // a reference to the Activity and associated resources.
     }
+
+    /**
+     * Your plugin is no longer associated with an Activity.
+     * You must clean up all resources and references. Your
+     * plugin may, or may not ever be associated with an Activity
+     * again.
+     */
     @Override
     public void onDetachedFromActivity() {
         activity = null;
-        // Your plugin is no longer associated with an Activity.
-        // You must clean up all resources and references. Your
-        // plugin may, or may not ever be associated with an Activity
-        // again.
     }
 }
