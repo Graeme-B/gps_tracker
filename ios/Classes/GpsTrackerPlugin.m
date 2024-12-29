@@ -2,48 +2,9 @@
 
 @implementation GpsTrackerPlugin
 
-          /*
-           int auth = 0;
-           switch (locMgr.accuracyAuthorization) {
-           case CLAccuracyAuthorization.fullAccuracy:
-           auth = 1;
-           break;
-           case CLAccuracyAuthorization.reducedAccuracy:
-           auth = 2;
-           break;
-           default:
-           auth = 3;
-           break;
-           }
-           //    locMgr = nil;
-           */
-
-/*
-    int auth = -1;
-    if (self.locationManager != nil)
-    {
-      auth = self.locationManager.accuracyAuthorization;
-
-      switch (locMgr.accuracyAuthorization) {
-      case CLAccuracyAuthorization.fullAccuracy:
-        auth = 1;
-        break;
-      case CLAccuracyAuthorization.reducedAccuracy:
-        auth = 2;
-        break;
-      default:
-        auth = 3;
-        break;
-      }
-*/
-
-
-
-/**
-  * FlutterViewController
-  */
-GpsTrackerEventHandler *eventHandler;
-GpsTrackerEventHandler *trackerEventHandler;
+GpsTrackerEventHandler    *eventHandler;
+GpsTrackerEventHandler    *trackerEventHandler;
+//AccelerometerEventHandler *accelerometerEventHandler;
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   FlutterMethodChannel* methodChannel = [FlutterMethodChannel
@@ -57,11 +18,19 @@ GpsTrackerEventHandler *trackerEventHandler;
       eventChannelWithName:@"com.moorwen.flutter.gps_tracker/event_channel"
       binaryMessenger:[registrar messenger]];
   [eventChannel setStreamHandler:eventHandler];
+
   trackerEventHandler = [[GpsTrackerEventHandler alloc] init];
   FlutterEventChannel *trackerEventChannel = [FlutterEventChannel
       eventChannelWithName:@"com.moorwen.flutter.gps_tracker/gps_tracker_event_channel"
       binaryMessenger:[registrar messenger]];
-  [trackerEventChannel setStreamHandler:trackerEventHandler];}
+  [trackerEventChannel setStreamHandler:trackerEventHandler];
+
+//  accelerometerEventHandler = [[AccelerometerEventHandler alloc] init];
+//  FlutterEventChannel *accelerometerEventChannel = [FlutterEventChannel
+//      eventChannelWithName:@"com.moorwen.flutter.gps_tracker/accelerometer_event_channel"
+//      binaryMessenger:[registrar messenger]];
+//  [accelerometerEventChannel setStreamHandler:accelerometerEventHandler];
+}
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
   if ([@"getBatteryLevel" isEqualToString:call.method]) {
@@ -101,20 +70,34 @@ GpsTrackerEventHandler *trackerEventHandler;
     }
     result(@(auth));
   } else if ([@"start" isEqualToString:call.method]) {
-    if (self.locationManager == nil)
-    {
-      self.locationManager = [[CLLocationManager alloc] init];
+    if (self.locationManager == nil) {
+        self.locationManager = [[CLLocationManager alloc] init];
 //      self.locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters;
 //      self.locationManager.desiredAccuracy = kCLLocationAccuracyBest;
-      self.locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation;
-      self.locationManager.distanceFilter = kCLDistanceFilterNone;
-      self.locationManager.allowsBackgroundLocationUpdates = YES;
-      self.locationManager.delegate = self;
-      [self.locationManager startUpdatingLocation];
+        self.locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation;
+        self.locationManager.distanceFilter = kCLDistanceFilterNone;
+        self.locationManager.allowsBackgroundLocationUpdates = YES;
+        self.locationManager.delegate = self;
+        [self.locationManager startUpdatingLocation];
+
+        self.motionManager = [[CMMotionManager alloc] init];
+        if ([self.motionManager isAccelerometerAvailable]) {
+            NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+            [self.motionManager startAccelerometerUpdatesToQueue:queue withHandler:^(
+                    CMAccelerometerData *accelerometerData, NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+//                  self.xAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.x];
+//                  self.yAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.y];
+//                  self.zAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.z];
+                    NSLog(@"GPSTracker - accelerometer x %6.2f y %6.2f z %6.2f",
+                          accelerometerData.acceleration.x, accelerometerData.acceleration.y,
+                          accelerometerData.acceleration.z);
+                });
+            }];
+        }
     }
   } else if ([@"stop" isEqualToString:call.method]) {
       [self.locationManager stopUpdatingLocation];
-//      _locationManager = nil;
       self.locationManager = nil;
   } else if ([@"startTracking" isEqualToString:call.method]) {
       _walkName = call.arguments[@"walkName"];
@@ -279,7 +262,7 @@ GpsTrackerEventHandler *trackerEventHandler;
 - (void)updateLocation:(CLLocation*)location walkName:(NSString *) walkName distance:(double) distance {
   if (_eventSink == nil) return;
 
-  NSMutableDictionary *coordinates = [NSMutableDictionary dictionaryWithCapacity:8];
+  NSMutableDictionary *coordinates = [NSMutableDictionary dictionaryWithCapacity:9];
   coordinates[@"reason"] = @"COORDINATE_UPDATE";
   coordinates[@"walk_name"] = walkName;
   coordinates[@"latitude"] = [NSNumber numberWithDouble:location.coordinate.latitude];
@@ -292,3 +275,46 @@ GpsTrackerEventHandler *trackerEventHandler;
   _eventSink(coordinates);
 }
 @end
+
+//@implementation AccelerometerEventHandler
+//  private let motionManager = CMMotionManager();
+//  private let queue         = OperationQueue();
+//
+////{
+////  // Listeners
+//////  NSMutableDictionary* listeners;
+//////  FlutterEventSink     thisEventSink;
+////}
+//
+//- (FlutterError*)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)eventSink {
+//    NSLog(@"GPSTracker - onListenWithArguments");
+//    if motionManager.isAccelerometerAvailable {
+//        motionManager.startAccelerometerUpdates(to: queue) { (data, error) in
+//            if data != nil {
+//                events([-data!.acceleration.x * GRAVITY, -data!.acceleration.y * GRAVITY, -data!.acceleration.z * GRAVITY])
+//            }
+//        }
+//    }
+//    return nil
+//    _eventSink = eventSink;
+//    return nil;
+//}
+//
+//- (FlutterError*)onCancelWithArguments:(id)arguments {
+//    NSLog(@"GPSTracker - onCancelWithArguments");
+//    _eventSink = nil;
+//    return nil;
+//}
+//
+//- (void)updateAccelerometer:(CLLocation*)location walkName:(NSString *) {
+//    if (_eventSink == nil) return;
+//
+//    NSMutableDictionary *values = [NSMutableDictionary dictionaryWithCapacity:4];
+//    values[@"reason"] = @"ACCELEROMETER_UPDATE";
+//    values[@"ACCELEROMETER_X"] = [NSNumber numberWithDouble:accelerometer.x];
+//    values[@"ACCELEROMETER_Y"] = [NSNumber numberWithDouble:accelerometer.y];
+//    values[@"ACCELEROMETER_Z"] = [NSNumber numberWithDouble:accelerometer.z];
+//    values[@"ACCELEROMETER_TIMESTAMP"] = [NSNumber numberWithLong:accelerometer.timestamp];
+//    _eventSink(values);
+//}
+//@end

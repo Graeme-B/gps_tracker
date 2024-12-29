@@ -14,6 +14,16 @@
 @property (strong) FlutterEventSink _Nullable     eventSink;
 @end
 
+@interface AccelerometerEventHandler : NSObject<FlutterStreamHandler>
+- (FlutterError* _Nullable)onListenWithArguments:(id _Nullable)arguments
+                                       eventSink:(_Nonnull FlutterEventSink)events;
+- (FlutterError* _Nullable)onCancelWithArguments:(id _Nullable)arguments;
+-  (void)updateAccelerometer:( CLLocation* _Nonnull )location walkName:( NSString * _Nonnull ) walkName distance:(double) distance;
+
+@property (strong) NSMutableDictionary* _Nullable listeners;
+@property (strong) FlutterEventSink _Nullable     eventSink;
+@end
+
 @interface GpsTrackerPlugin : NSObject<FlutterPlugin,CLLocationManagerDelegate>
 @property (nonatomic, strong) CLLocationManager * _Nullable locationManager;
 @property (nonatomic, strong) CMMotionManager * _Nullable motionManager;
