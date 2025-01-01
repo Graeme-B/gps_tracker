@@ -4,7 +4,7 @@
 
 GpsTrackerEventHandler    *eventHandler;
 GpsTrackerEventHandler    *trackerEventHandler;
-//AccelerometerEventHandler *accelerometerEventHandler;
+AccelerometerEventHandler *accelerometerEventHandler;
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   FlutterMethodChannel* methodChannel = [FlutterMethodChannel
@@ -25,11 +25,11 @@ GpsTrackerEventHandler    *trackerEventHandler;
       binaryMessenger:[registrar messenger]];
   [trackerEventChannel setStreamHandler:trackerEventHandler];
 
-//  accelerometerEventHandler = [[AccelerometerEventHandler alloc] init];
-//  FlutterEventChannel *accelerometerEventChannel = [FlutterEventChannel
-//      eventChannelWithName:@"com.moorwen.flutter.gps_tracker/accelerometer_event_channel"
-//      binaryMessenger:[registrar messenger]];
-//  [accelerometerEventChannel setStreamHandler:accelerometerEventHandler];
+  accelerometerEventHandler = [[AccelerometerEventHandler alloc] init];
+  FlutterEventChannel *accelerometerEventChannel = [FlutterEventChannel
+      eventChannelWithName:@"com.moorwen.flutter.gps_tracker/accelerometer_event_channel"
+      binaryMessenger:[registrar messenger]];
+  [accelerometerEventChannel setStreamHandler:accelerometerEventHandler];
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -86,12 +86,58 @@ GpsTrackerEventHandler    *trackerEventHandler;
             [self.motionManager startAccelerometerUpdatesToQueue:queue withHandler:^(
                     CMAccelerometerData *accelerometerData, NSError *error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    NSLog(@"GPSTracker - accelerometer time %6.4f raw [%6.4f %6.4f %6.4f]",
+                          CACurrentMediaTime(), accelerometerData.acceleration.x,
+                          accelerometerData.acceleration.y);
+
 //                  self.xAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.x];
 //                  self.yAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.y];
 //                  self.zAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.z];
-                    NSLog(@"GPSTracker - accelerometer x %6.2f y %6.2f z %6.2f",
-                          accelerometerData.acceleration.x, accelerometerData.acceleration.y,
-                          accelerometerData.acceleration.z);
+
+//                    CMMotionManager *motionManager = [[CMMotionManager alloc] init];
+//                    CMRotationMatrix rotationMatrix = motionManager.deviceMotion.attitude.rotationMatrix;
+//
+//                    double accelX = rotationMatrix.m11*accelerometerData.acceleration.x +
+//                             rotationMatrix.m12*accelerometerData.acceleration.y +
+//                             rotationMatrix.m13*accelerometerData.acceleration.z;
+//                    double accelY = rotationMatrix.m21*accelerometerData.acceleration.x +
+//                             rotationMatrix.m22*accelerometerData.acceleration.y +
+//                             rotationMatrix.m23*accelerometerData.acceleration.z;
+//                    double accelZ = rotationMatrix.m31*accelerometerData.acceleration.x +
+//                             rotationMatrix.m32*accelerometerData.acceleration.y +
+//                             rotationMatrix.m33*accelerometerData.acceleration.z;
+//                    NSLog(@"GPSTracker - accelerometer time %6.4f raw [%6.4f %6.4f %6.4f] normalised [%6.4f %6.4f %6.4f]",
+//                          CACurrentMediaTime(), accelerometerData.acceleration.x, accelerometerData.acceleration.y,
+//                          accelerometerData.acceleration.z, accelX, accelY, accelZ);
+//                    NSLog(@"GPSTracker - matrix [%6.4f %6.4f %6.4f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
+//                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
+//                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
+
+                    [accelerometerEventHandler updateAccelerometer:accelerometerData];
+
+                });
+            }];
+        }
+        if ([self.motionManager isDeviceMotionAvailable]) {
+            NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+
+            [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame: CMAttitudeReferenceFrameXArbitraryZVertical
+                                                                    toQueue:queue withHandler:^(CMDeviceMotion *motion, NSError *error){
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    NSLog(@"GPSTracker - motion time %6.4f yaw %6.4f pitch %6.4f roll %6.4f",
+                          CACurrentMediaTime(), motion.attitude.yaw, motion.attitude.pitch, motion.attitude.roll);
+
+//                    CMMotionManager *motionManager = [[CMMotionManager alloc] init];
+//                    CMRotationMatrix rotationMatrix = motionManager.deviceMotion.attitude.rotationMatrix;
+//                    NSLog(@"GPSTracker - matrix [%6.4f %6.4f %6.4f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
+//                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
+//                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
+//                    motionManager = nil;
+
+
+//                    if self.attitudeReferenceFrame == CMAttitudeReferenceFrame.xMagneticNorthZVertical  (which it will always be!)
+//                      let yaw = (data!.attitude.yaw + Double.pi + Double.pi / 2).truncatingRemainder(dividingBy: Double.pi * 2) - Double.pi
+//                    events([yaw, data!.attitude.pitch, data!.attitude.roll])
                 });
             }];
         }
@@ -153,7 +199,6 @@ GpsTrackerEventHandler    *trackerEventHandler;
         return;
     }
    
-    NSLog(@"GPSTracker - didUpdateLocations called");
     bool first = true;
     for (CLLocation *location in locations)
     {
@@ -162,8 +207,8 @@ GpsTrackerEventHandler    *trackerEventHandler;
         {
             distance = [ _position distanceFromLocation:location];
         }
-        NSLog(@"GPSTracker - didUpdateLocations distance %6.2f lat %6.6f lon %6.6f accuracy %6.6f",
-          distance,location.coordinate.latitude,location.coordinate.longitude,location.horizontalAccuracy);
+        NSLog(@"GPSTracker - didUpdateLocations time %6.4f distance %6.2f lat %6.6f lon %6.6f accuracy %6.6f",
+              CACurrentMediaTime(),distance,location.coordinate.latitude,location.coordinate.longitude,location.horizontalAccuracy);
 
         if (first && _position == nil)
         {
@@ -260,6 +305,7 @@ GpsTrackerEventHandler    *trackerEventHandler;
 }
 
 - (void)updateLocation:(CLLocation*)location walkName:(NSString *) walkName distance:(double) distance {
+  NSLog(@"GPSTracker - Update Location");
   if (_eventSink == nil) return;
 
   NSMutableDictionary *coordinates = [NSMutableDictionary dictionaryWithCapacity:9];
@@ -276,45 +322,28 @@ GpsTrackerEventHandler    *trackerEventHandler;
 }
 @end
 
-//@implementation AccelerometerEventHandler
-//  private let motionManager = CMMotionManager();
-//  private let queue         = OperationQueue();
-//
-////{
-////  // Listeners
-//////  NSMutableDictionary* listeners;
-//////  FlutterEventSink     thisEventSink;
-////}
-//
-//- (FlutterError*)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)eventSink {
-//    NSLog(@"GPSTracker - onListenWithArguments");
-//    if motionManager.isAccelerometerAvailable {
-//        motionManager.startAccelerometerUpdates(to: queue) { (data, error) in
-//            if data != nil {
-//                events([-data!.acceleration.x * GRAVITY, -data!.acceleration.y * GRAVITY, -data!.acceleration.z * GRAVITY])
-//            }
-//        }
-//    }
-//    return nil
-//    _eventSink = eventSink;
-//    return nil;
-//}
-//
-//- (FlutterError*)onCancelWithArguments:(id)arguments {
-//    NSLog(@"GPSTracker - onCancelWithArguments");
-//    _eventSink = nil;
-//    return nil;
-//}
-//
-//- (void)updateAccelerometer:(CLLocation*)location walkName:(NSString *) {
-//    if (_eventSink == nil) return;
-//
-//    NSMutableDictionary *values = [NSMutableDictionary dictionaryWithCapacity:4];
-//    values[@"reason"] = @"ACCELEROMETER_UPDATE";
-//    values[@"ACCELEROMETER_X"] = [NSNumber numberWithDouble:accelerometer.x];
-//    values[@"ACCELEROMETER_Y"] = [NSNumber numberWithDouble:accelerometer.y];
-//    values[@"ACCELEROMETER_Z"] = [NSNumber numberWithDouble:accelerometer.z];
-//    values[@"ACCELEROMETER_TIMESTAMP"] = [NSNumber numberWithLong:accelerometer.timestamp];
-//    _eventSink(values);
-//}
-//@end
+@implementation AccelerometerEventHandler
+- (FlutterError*)onListenWithArguments:(id)arguments eventSink:(FlutterEventSink)eventSink {
+    NSLog(@"GPSTracker - accelerometer onListenWithArguments");
+    _eventSink = eventSink;
+    return nil;
+}
+
+- (FlutterError*)onCancelWithArguments:(id)arguments {
+    NSLog(@"GPSTracker - accelerometer onCancelWithArguments");
+    _eventSink = nil;
+    return nil;
+}
+
+- (void)updateAccelerometer:(CMAccelerometerData*)accelerometerData {
+    if (_eventSink == nil) return;
+
+    NSMutableDictionary *values = [NSMutableDictionary dictionaryWithCapacity:4];
+    values[@"reason"] = @"ACCELEROMETER_UPDATE";
+    values[@"accelerometerX"] = [NSNumber numberWithDouble:accelerometerData.acceleration.x];
+    values[@"accelerometerY"] = [NSNumber numberWithDouble:accelerometerData.acceleration.y];
+    values[@"accelerometerZ"] = [NSNumber numberWithDouble:accelerometerData.acceleration.z];
+    values[@"accelerometerTimestamp"] = 0; // [NSNumber numberWithLong:accelerometerData.accelerometer.timestamp];
+    _eventSink(values);
+}
+@end

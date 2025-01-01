@@ -2,6 +2,7 @@
 #import <Flutter/FlutterCodecs.h>
 #import <CoreLocation/CoreLocation.h>
 #import <CoreMotion/CoreMotion.h>
+#import <QuartzCore/QuartzCore.h>
 
 @interface GpsTrackerEventHandler : NSObject<FlutterStreamHandler>
 - (FlutterError* _Nullable)onListenWithArguments:(id _Nullable)arguments
@@ -18,7 +19,7 @@
 - (FlutterError* _Nullable)onListenWithArguments:(id _Nullable)arguments
                                        eventSink:(_Nonnull FlutterEventSink)events;
 - (FlutterError* _Nullable)onCancelWithArguments:(id _Nullable)arguments;
--  (void)updateAccelerometer:( CLLocation* _Nonnull )location walkName:( NSString * _Nonnull ) walkName distance:(double) distance;
+-  (void)updateAccelerometer:(CMAccelerometerData*)accelerometerData;
 
 @property (strong) NSMutableDictionary* _Nullable listeners;
 @property (strong) FlutterEventSink _Nullable     eventSink;

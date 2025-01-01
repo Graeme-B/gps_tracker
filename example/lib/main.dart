@@ -383,7 +383,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _startService() async {
     if (!serviceStarted) {
       GpsTracker.addGpsListener(_GPSlistener);
-     GpsTracker.addAccelerometerListener(_accelerometerListener);
+//      GpsTracker.addAccelerometerListener(_accelerometerListener);
       await GpsTracker.start(
         title: "GPS Tracker",
         text: "Text",
@@ -499,7 +499,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _accelerometerListener(dynamic o) {
-    print("MAIN - Accelerometer update");
+    // print("MAIN - Accelerometer update");
     // print("type "  + o.runtimeType.toString());
     // Map retval = o as Map;
     // print("retval type "  + retval.runtimeType.toString());
