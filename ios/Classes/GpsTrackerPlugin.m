@@ -82,13 +82,20 @@ AccelerometerEventHandler *accelerometerEventHandler;
 
         self.motionManager = [[CMMotionManager alloc] init];
         if ([self.motionManager isAccelerometerAvailable]) {
+            [self.motionManager setAccelerometerUpdateInterval:0.1];
+            [self.motionManager setDeviceMotionUpdateInterval:0.1];
+            if ([self.motionManager isDeviceMotionAvailable]) {
+                [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame:CMAttitudeReferenceFrameXArbitraryZVertical];
+            }
             NSOperationQueue *queue = [[NSOperationQueue alloc] init];
             [self.motionManager startAccelerometerUpdatesToQueue:queue withHandler:^(
                     CMAccelerometerData *accelerometerData, NSError *error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    NSLog(@"GPSTracker - accelerometer time %6.4f raw [%6.4f %6.4f %6.4f]",
+                    NSLog(@"GPSTracker - accelerometer time %6.4f raw [%6.4f %6.4f %6.4f] yaw %6.4f pitch %6.4f roll %6.4f",
                           CACurrentMediaTime(), accelerometerData.acceleration.x,
-                          accelerometerData.acceleration.y);
+                          accelerometerData.acceleration.y,
+                          self.motionManager.deviceMotion.attitude.yaw, self.motionManager.deviceMotion.attitude.pitch,
+                          self.motionManager.deviceMotion.attitude.roll);
 
 //                  self.xAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.x];
 //                  self.yAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.y];
@@ -117,30 +124,32 @@ AccelerometerEventHandler *accelerometerEventHandler;
 
                 });
             }];
+
         }
-        if ([self.motionManager isDeviceMotionAvailable]) {
-            NSOperationQueue *queue = [[NSOperationQueue alloc] init];
-
-            [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame: CMAttitudeReferenceFrameXArbitraryZVertical
-                                                                    toQueue:queue withHandler:^(CMDeviceMotion *motion, NSError *error){
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    NSLog(@"GPSTracker - motion time %6.4f yaw %6.4f pitch %6.4f roll %6.4f",
-                          CACurrentMediaTime(), motion.attitude.yaw, motion.attitude.pitch, motion.attitude.roll);
-
-//                    CMMotionManager *motionManager = [[CMMotionManager alloc] init];
-//                    CMRotationMatrix rotationMatrix = motionManager.deviceMotion.attitude.rotationMatrix;
-//                    NSLog(@"GPSTracker - matrix [%6.4f %6.4f %6.4f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
-//                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
-//                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
-//                    motionManager = nil;
-
-
-//                    if self.attitudeReferenceFrame == CMAttitudeReferenceFrame.xMagneticNorthZVertical  (which it will always be!)
-//                      let yaw = (data!.attitude.yaw + Double.pi + Double.pi / 2).truncatingRemainder(dividingBy: Double.pi * 2) - Double.pi
-//                    events([yaw, data!.attitude.pitch, data!.attitude.roll])
-                });
-            }];
-        }
+//        if ([self.motionManager isDeviceMotionAvailable]) {
+//            [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame: CMAttitudeReferenceFrameXArbitraryZVertical];
+////            NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+////
+////            [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame: CMAttitudeReferenceFrameXArbitraryZVertical
+////                                                                    toQueue:queue withHandler:^(CMDeviceMotion *motion, NSError *error){
+////                dispatch_async(dispatch_get_main_queue(), ^{
+////                    NSLog(@"GPSTracker - motion time %6.4f yaw %6.4f pitch %6.4f roll %6.4f",
+////                          CACurrentMediaTime(), motion.attitude.yaw, motion.attitude.pitch, motion.attitude.roll);
+////
+//////                    CMMotionManager *motionManager = [[CMMotionManager alloc] init];
+//////                    CMRotationMatrix rotationMatrix = motionManager.deviceMotion.attitude.rotationMatrix;
+//////                    NSLog(@"GPSTracker - matrix [%6.4f %6.4f %6.4f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
+//////                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
+//////                    NSLog(@"GPSTracker -        [%6.4f %6.4f %6.4f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
+//////                    motionManager = nil;
+////
+////
+//////                    if self.attitudeReferenceFrame == CMAttitudeReferenceFrame.xMagneticNorthZVertical  (which it will always be!)
+//////                      let yaw = (data!.attitude.yaw + Double.pi + Double.pi / 2).truncatingRemainder(dividingBy: Double.pi * 2) - Double.pi
+//////                    events([yaw, data!.attitude.pitch, data!.attitude.roll])
+////                });
+////            }];
+//        }
     }
   } else if ([@"stop" isEqualToString:call.method]) {
       [self.locationManager stopUpdatingLocation];
