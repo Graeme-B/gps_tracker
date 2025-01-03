@@ -81,12 +81,16 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
     private boolean  isGPSFix         = false;
 
     private final ArrayList<Pair<Double,Double>> walkTrack = new ArrayList<>();
-    private float mSensorX;
-    private float mSensorY;
-    private float mSensorZ;
-    private long mSensorTimeStamp;
-    private SensorManager mSensorManager;
-    private Sensor mAccelerometer;
+    private final float[] accelerometerReading = new float[3];
+    private final float[] magnetometerReading  = new float[3];
+    private final float[] rotationMatrix       = new float[9];
+    private final float[] orientationAngles    = new float[3];
+
+    private long          mSensorTimeStamp = 0;
+    private SensorManager mSensorManager   = null;
+    private Sensor        mAccelerometer   = null;
+    private Sensor        mMagneticField   = null;
+    private Sensor        mRotationVector  = null;
 
     /*
      * Methods to get some of the internal variables
@@ -152,7 +156,7 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
     // Debug purposes only
     public int getBatteryLevel()
     {
-        Log.d("GPSService", "\nBattery");
+        Log.d("GPSService", "Battery");
 
         int batteryLevel;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
@@ -189,10 +193,10 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
     public int onStartCommand(Intent intent, int flags, int startId)
     {
 
-        Log.d("GPSService", "\nOnStartCommand");
+        Log.d("GPSService", "OnStartCommand");
         if (intent.getAction().equals(GpsTrackerPlugin.STARTFOREGROUND_ACTION))
         {
-            Log.d("GPSService", "\nStart");
+            Log.d("GPSService", "Start");
 
             mNotifyManager = (NotificationManager) getApplicationContext().getSystemService(NOTIFICATION_SERVICE);
             mBuilder = new NotificationCompat.Builder(this, "MyChannelID");
@@ -231,10 +235,12 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
         else if (intent.getAction().equals( GpsTrackerPlugin.STOPFOREGROUND_ACTION)) {
             Log.d("GPSService", "Stop");
             //your end service code
-            stopForeground(true);
+            if (tracking) stopTracking();
+            if (mSensorManager != null) mSensorManager.unregisterListener(this);
             if (mNotifyManager != null) {
                 mNotifyManager.cancelAll();
             }
+            stopForeground(true);
             stopSelf();
         }
 
@@ -252,7 +258,7 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
      */
     public void startTracking(String walkName)
     {
-        Log.d("GPSService", "\nstartTracking - walk name " + walkName);
+        Log.d("GPSService", "startTracking - walk name " + walkName);
         paused        = false;
         distance      = 0.0;
         elapsedTime   = 0;
@@ -282,7 +288,7 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
      */
     public void stopTracking()
     {
-        Log.d("GPSService", "\nstopTracking");
+        Log.d("GPSService", "stopTracking");
         tracking = false;
         walkName = null;
         timerHandler.removeCallbacks(timerRunnable);
@@ -309,8 +315,6 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
      */
     private void broadcastLocationChange()
     {
-        Log.d("GPSService", "\nbroadcastLocationChange");
-
         Intent intent = new Intent();
         intent.setAction(LOCATION_UPDATE);
         intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
@@ -327,7 +331,7 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
         }
         intent.putExtra(DISTANCE, distance);
         intent.putExtra(TIME, elapsedTime);
-        Log.d("GPSService", "\nsending broadcast");
+//        Log.d("GPSService", "sending broadcast");
         sendBroadcast(intent);
     }
 
@@ -351,11 +355,11 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
         Intent intent = new Intent();
         intent.setAction(ACCELEROMETER_UPDATE);
         intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-        intent.putExtra(ACCELEROMETER_X,mSensorX);
-        intent.putExtra(ACCELEROMETER_Y,mSensorY);
-        intent.putExtra(ACCELEROMETER_Z,mSensorZ);
+        intent.putExtra(ACCELEROMETER_X,accelerometerReading[0]);
+        intent.putExtra(ACCELEROMETER_Y,accelerometerReading[1]);
+        intent.putExtra(ACCELEROMETER_Z,accelerometerReading[2]);
         intent.putExtra(ACCELEROMETER_TIMESTAMP,mSensorTimeStamp);
-        Log.d("GPSService","Broadcast accelerometer change");
+//        Log.d("GPSService","Broadcast accelerometer change");
         sendBroadcast(intent);
     }
 
@@ -370,8 +374,29 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
         try
         {
             mSensorManager = (SensorManager) getApplicationContext().getSystemService(Context.SENSOR_SERVICE);
+
             mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-            mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_UI);
+            if (mAccelerometer != null) {
+                mSensorManager.registerListener(this, mAccelerometer,
+                        SensorManager.SENSOR_DELAY_NORMAL, SensorManager.SENSOR_DELAY_UI);
+            }
+            mRotationVector = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+            if (mRotationVector != null) {
+                mSensorManager.registerListener(this, mRotationVector,
+                        SensorManager.SENSOR_DELAY_NORMAL, SensorManager.SENSOR_DELAY_UI);
+            } else {
+                mMagneticField = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+                if (mMagneticField != null) {
+                    mSensorManager.registerListener(this, mMagneticField,
+                            SensorManager.SENSOR_DELAY_NORMAL, SensorManager.SENSOR_DELAY_UI);
+                }
+            }
+
+//            Log.d("GPSService", String.format("Accelerometer %s rotation %s orientation %s magnetometer %s",
+//                    mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) == null ? "missing" : "present",
+//                    mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) == null ? "missing" : "present",
+//                    mSensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION) == null ? "missing" : "present",
+//                    mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) == null ? "missing" : "present"));
 
             locationManager = (LocationManager) getApplicationContext().getSystemService(LOCATION_SERVICE);
             try
@@ -410,7 +435,6 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
     @Override
     public void onDestroy()
     {
-        mSensorManager.unregisterListener(this);
         super.onDestroy();
     }
 
@@ -424,11 +448,11 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
     {
         try
         {
-            Log.d("GPSService", "\nonLocationChanged");
+//            Log.d("GPSService", "onLocationChanged");
 
             if (location.getProvider().equals(LocationManager.GPS_PROVIDER))
             {
-                Log.d("GPSService", "onLocationChange");
+//                Log.d("GPSService", "onLocationChange");
                 isGPSFix = true;
 
                 if (tracking)
@@ -501,16 +525,53 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER)
-            return;
+//        Log.d("GPSService", String.format("onSensorChanged - sensor %d", event.sensor.getType()));
+        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            System.arraycopy(event.values, 0, accelerometerReading,0, accelerometerReading.length);
+            if (System.currentTimeMillis() - mSensorTimeStamp > 1000) {
+                mSensorTimeStamp = System.currentTimeMillis();
+                Log.d("GPSService", String.format("Sensor changed.....time %d",mSensorTimeStamp));
+            }
 
-        mSensorX = event.values[0];
-        mSensorY = event.values[1];
-        mSensorZ = event.values[2];
-        mSensorTimeStamp = event.timestamp;
+//// Rotation matrix based on current readings from accelerometer and magnetometer.
+//            final float[] rotationMatrix = new float[9];
+//            mSensorManager.getRotationMatrix(rotationMatrix, null,
+//                    accelerometerReading, magnetometerReading);
+//
+//// Express the updated rotation matrix as three orientation angles.
+//            final float[] orientationAngles = new float[3];
 
-        Log.d("GPSService",String.format("onSensorChanged - x %3f y %3f z %3f", mSensorX, mSensorY, mSensorZ));
-        broadcastAccelerometerChange();
+
+//            Log.d("GPSService", String.format("onSensorChanged - time %d x %3f y %3f z %3f",
+//                    System.currentTimeMillis(), accelerometerReading[0], accelerometerReading[1], accelerometerReading[2]));
+            broadcastAccelerometerChange();
+        } else if (event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR) {
+            System.arraycopy(event.values, 0, orientationAngles, 0, orientationAngles.length);
+            // here i am
+            // Also need to set up the interval!
+            // Then calculate (for both) the new lat/lon based on the inertial navigation values
+//            Log.d("GPSService", String.format("onSensorChanged - time %d yaw %3f pitch %3f roll %3f",
+//                    System.currentTimeMillis(), orientationAngles[0], orientationAngles[2], orientationAngles[2]));
+        } else if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+            System.arraycopy(event.values, 0, magnetometerReading, 0, magnetometerReading.length);
+//            Log.d("GPSService", String.format("onSensorChanged - time %d magX %3f magY %3f magZ %3f",
+//                    System.currentTimeMillis(), magnetometerReading[0], magnetometerReading[2], magnetometerReading[2]));
+        }
+
+    }
+
+    // Compute the three orientation angles based on the most recent readings from
+    // the device's accelerometer and magnetometer.
+    public void updateOrientationAngles() {
+        // Update rotation matrix, which is needed to update orientation angles.
+        SensorManager.getRotationMatrix(rotationMatrix, null,
+                accelerometerReading, magnetometerReading);
+
+        // "rotationMatrix" now has up-to-date information.
+
+        SensorManager.getOrientation(rotationMatrix, orientationAngles);
+
+        // "orientationAngles" now has up-to-date information.
     }
 
     @Override
