@@ -6,6 +6,11 @@ GpsTrackerEventHandler    *eventHandler;
 GpsTrackerEventHandler    *trackerEventHandler;
 AccelerometerEventHandler *accelerometerEventHandler;
 
+double         prevXSpeed;
+double         prevYSpeed;
+double         prevLatLon[2];
+CFAbsoluteTime prevTime;
+
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   FlutterMethodChannel* methodChannel = [FlutterMethodChannel
       methodChannelWithName:@"com.moorwen.flutter.gps_tracker/method_channel"
@@ -82,8 +87,8 @@ AccelerometerEventHandler *accelerometerEventHandler;
 
         self.motionManager = [[CMMotionManager alloc] init];
         if ([self.motionManager isAccelerometerAvailable]) {
-            [self.motionManager setAccelerometerUpdateInterval:0.1];
-            [self.motionManager setDeviceMotionUpdateInterval:0.1];
+            [self.motionManager setAccelerometerUpdateInterval:REPORTING_INTERVAL];
+            [self.motionManager setDeviceMotionUpdateInterval:REPORTING_INTERVAL];
             if ([self.motionManager isDeviceMotionAvailable]) {
                 [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame:CMAttitudeReferenceFrameXArbitraryZVertical];
             }
@@ -91,11 +96,11 @@ AccelerometerEventHandler *accelerometerEventHandler;
             [self.motionManager startAccelerometerUpdatesToQueue:queue withHandler:^(
                     CMAccelerometerData *accelerometerData, NSError *error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    NSLog(@"GPSTracker - accelerometer time %6.4f raw [%6.4f %6.4f %6.4f] yaw %6.4f pitch %6.4f roll %6.4f",
-                          CACurrentMediaTime(), accelerometerData.acceleration.x,
-                          accelerometerData.acceleration.y,
-                          self.motionManager.deviceMotion.attitude.yaw, self.motionManager.deviceMotion.attitude.pitch,
-                          self.motionManager.deviceMotion.attitude.roll);
+//                    NSLog(@"GPSTracker - accelerometer time %6.4f raw [%6.4f %6.4f %6.4f] yaw %6.4f pitch %6.4f roll %6.4f",
+//                          CACurrentMediaTime(), accelerometerData.acceleration.x,
+//                          accelerometerData.acceleration.y,
+//                          self.motionManager.deviceMotion.attitude.yaw, self.motionManager.deviceMotion.attitude.pitch,
+//                          self.motionManager.deviceMotion.attitude.roll);
 
 //                  self.xAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.x];
 //                  self.yAxis.text = [NSString stringWithFormat:@"%.2f",accelerometerData.acceleration.y];
@@ -163,8 +168,10 @@ AccelerometerEventHandler *accelerometerEventHandler;
       _distance = 0;
       _position = nil;
       _paused = false;
+      [accelerometerEventHandler setWalkName:_walkName];
   } else if ([@"stopTracking" isEqualToString:call.method]) {
       _walkName = nil;
+      [accelerometerEventHandler setWalkName:_walkName];
   } else if ([@"getLocation" isEqualToString:call.method]) {
       double posn[2];
       posn[0] = _position.coordinate.latitude;
@@ -216,8 +223,8 @@ AccelerometerEventHandler *accelerometerEventHandler;
         {
             distance = [ _position distanceFromLocation:location];
         }
-        NSLog(@"GPSTracker - didUpdateLocations time %6.4f distance %6.2f lat %6.6f lon %6.6f accuracy %6.6f",
-              CACurrentMediaTime(),distance,location.coordinate.latitude,location.coordinate.longitude,location.horizontalAccuracy);
+//        NSLog(@"GPSTracker - didUpdateLocations time %6.4f distance %6.2f lat %6.6f lon %6.6f accuracy %6.6f",
+//              CACurrentMediaTime(),distance,location.coordinate.latitude,location.coordinate.longitude,location.horizontalAccuracy);
 
         if (first && _position == nil)
         {
@@ -314,20 +321,60 @@ AccelerometerEventHandler *accelerometerEventHandler;
 }
 
 - (void)updateLocation:(CLLocation*)location walkName:(NSString *) walkName distance:(double) distance {
-  NSLog(@"GPSTracker - Update Location");
+  NSLog(@"GPSTracker - Update Location from GPS");
   if (_eventSink == nil) return;
 
+  // Send the event on
   NSMutableDictionary *coordinates = [NSMutableDictionary dictionaryWithCapacity:9];
-  coordinates[@"reason"] = @"COORDINATE_UPDATE";
+  coordinates[@"reason"]    = @"COORDINATE_UPDATE";
   coordinates[@"walk_name"] = walkName;
-  coordinates[@"latitude"] = [NSNumber numberWithDouble:location.coordinate.latitude];
+  coordinates[@"latitude"]  = [NSNumber numberWithDouble:location.coordinate.latitude];
   coordinates[@"longitude"] = [NSNumber numberWithDouble:location.coordinate.longitude];
-  coordinates[@"accuracy"] = [NSNumber numberWithDouble:location.horizontalAccuracy];
-  coordinates[@"speed"] = [NSNumber numberWithDouble:location.speed];
-  coordinates[@"heading"] = [NSNumber numberWithDouble:location.course];
-  coordinates[@"distance"] = [NSNumber numberWithDouble:distance];
+  coordinates[@"accuracy"]  = [NSNumber numberWithDouble:location.horizontalAccuracy];
+  coordinates[@"speed"]     = [NSNumber numberWithDouble:location.speed];
+  coordinates[@"heading"]   = [NSNumber numberWithDouble:location.course];
+  coordinates[@"distance"]  = [NSNumber numberWithDouble:distance];
   coordinates[@"fix_valid"] = [NSNumber numberWithBool:true];
+  coordinates[@"provider"]  = @"GPS";
   _eventSink(coordinates);
+
+  // Calculate speed for the inertial navigation
+  // Speed is M/Sec
+  // Course is in degrees and is relative to due North
+  prevXSpeed    = location.speed*cos((location.course*M_PI)/180);
+  prevYSpeed    = location.speed*sin((location.course*M_PI)/180 );
+  prevLatLon[0] = location.coordinate.latitude;
+  prevLatLon[1] = location.coordinate.longitude;
+  prevTime      = CFAbsoluteTimeGetCurrent();
+}
+
+//    NSMutableDictionary *coordinates = [NSMutableDictionary dictionaryWithCapacity:9];
+//    coordinates[@"reason"] = @"COORDINATE_UPDATE";
+//    coordinates[@"walk_name"] = walkName;
+//    coordinates[@"latitude"] = [NSNumber numberWithDouble:newLatLon[0]];
+//    coordinates[@"longitude"] = [NSNumber numberWithDouble:newLatLon[1]];
+//    coordinates[@"accuracy"] = [NSNumber numberWithDouble:0.0];
+//    coordinates[@"speed"] = [NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[1],2) + pow(yDistanceAndSpeed[1],2))];
+//    coordinates[@"heading"] = [NSNumber numberWithDouble:heading];
+//    coordinates[@"distance"] = [NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[0],2) + pow(yDistanceAndSpeed[0],2))];
+//    coordinates[@"provider"] = @"INS";
+//    coordinates[@"fix_valid"] = [NSNumber numberWithBool:true];
+- (void) sendCoordinateUpdate: (NSString * _Nonnull) walkName: (double) lat: (double) lon: (double) accuracy: (double) speed: (double) heading: (double) distance: (NSString* ) provider {
+    if (_eventSink == nil) return;
+
+    NSMutableDictionary *coordinates = [NSMutableDictionary dictionaryWithCapacity:11];
+    coordinates[@"reason"]    = @"COORDINATE_UPDATE";
+    coordinates[@"walk_name"] = walkName;
+    coordinates[@"latitude"]  = [NSNumber numberWithDouble:lat];
+    coordinates[@"longitude"] = [NSNumber numberWithDouble:lon];
+    coordinates[@"accuracy"]  = [NSNumber numberWithDouble:accuracy];
+    coordinates[@"speed"]     = [NSNumber numberWithDouble:speed];
+    coordinates[@"heading"]   = [NSNumber numberWithDouble:heading];
+    coordinates[@"distance"]  = [NSNumber numberWithDouble:distance];
+    coordinates[@"fix_valid"] = [NSNumber numberWithBool:true];
+    coordinates[@"provider"]  = provider;
+    NSLog(@"GPSTracker - Update Location from INS");
+    _eventSink(coordinates);
 }
 @end
 
@@ -354,5 +401,259 @@ AccelerometerEventHandler *accelerometerEventHandler;
     values[@"accelerometerZ"] = [NSNumber numberWithDouble:accelerometerData.acceleration.z];
     values[@"accelerometerTimestamp"] = 0; // [NSNumber numberWithLong:accelerometerData.accelerometer.timestamp];
     _eventSink(values);
+    [self reportUpdatedPosition : accelerometerData];
 }
+
+// Calculate distance travelled and final speed from acceleration, initial speed and time.
+// Acceleration is m/s**2
+// Speed is m/s
+// Time is in milliseconds
+// Output distance is in metres
+- (void)calculateDistanceAndSpeed:(double) accel: (double) initialSpeed: (int) time: (double*) distanceAndSpeed {
+    double finalSpeed   = initialSpeed + (accel*time)/1000.0;
+    distanceAndSpeed[0] = finalSpeed;
+    distanceAndSpeed[1] = (initialSpeed + finalSpeed)*0.5*(time/1000.0);
+}
+
+// Calculate the new lat/lon from the current lat/lon and x/y distance (x - NorthSouth, y - EastWest)
+// https://stackoverflow.com/questions/7477003/calculating-new-longitude-latitude-from-old-n-meters
+// Latitude:
+//    var earth = 6378.137,  //radius of the earth in kilometer
+//       pi = Math.PI,
+//       m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree`
+//    var new_latitude = latitude + (your_meters * m);
+// Longitude:
+//   var earth = 6378.137,  //radius of the earth in kilometer
+//      pi = Math.PI,
+//      cos = Math.cos,
+//      m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree
+//   var new_longitude = longitude + (your_meters * m) / cos(latitude * (pi / 180));
+- (void)calculateNewLatLon:(double*) currentLatLon: (double) xDistance: (double) yDistance: (double*) newLatLon {
+    newLatLon[0] = currentLatLon[0] + (xDistance*ONE_METRE);
+    newLatLon[1] = currentLatLon[1] + (yDistance*ONE_METRE)/(cos((currentLatLon[1]*M_PI)/180.0));
+}
+
+- (void)reportUpdatedPosition:(CMAccelerometerData*)accelerometerData {
+    double xDistanceAndSpeed[2];
+    double yDistanceAndSpeed[2];
+    double newLatLon[2];
+
+    CFAbsoluteTime   currTime       = CFAbsoluteTimeGetCurrent();
+    CMMotionManager *motionManager  = [[CMMotionManager alloc] init];
+    CMRotationMatrix rotationMatrix = motionManager.deviceMotion.attitude.rotationMatrix;
+
+    double accelX = rotationMatrix.m11 * accelerometerData.acceleration.x +
+                    rotationMatrix.m12 * accelerometerData.acceleration.y +
+                    rotationMatrix.m13 * accelerometerData.acceleration.z;
+    double accelY = rotationMatrix.m21 * accelerometerData.acceleration.x +
+                    rotationMatrix.m22 * accelerometerData.acceleration.y +
+                    rotationMatrix.m23 * accelerometerData.acceleration.z;
+
+    long interval = [[NSNumber numberWithDouble:(currTime - prevTime)*1000.0] longValue];
+//    [self calculateDistanceAndSpeed:accelX : prevXSpeed : [NSNumber numberWithDouble:(currTime - prevTime)*1000.0] : xDistanceAndSpeed];
+    [self calculateDistanceAndSpeed:accelX : prevXSpeed : interval : xDistanceAndSpeed];
+//    [self calculateDistanceAndSpeed:accelY : prevYSpeed : [NSNumber numberWithDouble:(currTime - prevTime)*1000.0] : yDistanceAndSpeed)];
+    [self calculateDistanceAndSpeed:accelY : prevYSpeed : interval : yDistanceAndSpeed];
+    [self calculateNewLatLon:prevLatLon : xDistanceAndSpeed[0] : yDistanceAndSpeed[0] : newLatLon];
+
+    // Calculate the heading, allowing for tan approaching infinity (y approaching 0)
+    double heading = yDistanceAndSpeed[0] > ZERO_TOL ? atan(xDistanceAndSpeed[0]/yDistanceAndSpeed[0]) : 90.0;
+
+    double xx = [[NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[1],2) + pow(yDistanceAndSpeed[1],2))] doubleValue];
+
+    // Send the event on
+    if (_walkName != nil) {
+        [trackerEventHandler sendCoordinateUpdate:
+           _walkName:
+           [[NSNumber numberWithDouble:newLatLon[0]] doubleValue] :
+           [[NSNumber numberWithDouble:newLatLon[1]] doubleValue] :
+           [[NSNumber numberWithDouble:0.0] doubleValue] :
+           [[NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[1], 2) + pow(yDistanceAndSpeed[1],2))] doubleValue] :
+           [[NSNumber numberWithDouble:heading] doubleValue] :
+           [[NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[0], 2) + pow(yDistanceAndSpeed[0],2))] doubleValue] :
+           @"INS"
+        ];
+    }
+
+    prevXSpeed    = xDistanceAndSpeed[1];
+    prevYSpeed    = yDistanceAndSpeed[1];
+    prevLatLon[0] = newLatLon[0];
+    prevLatLon[1] = newLatLon[1];
+    prevTime      = currTime;
+}
+
+- (void)setWalkName: (NSString*) walkName {
+    _walkName = walkName;
+}
+
 @end
+
+//static const double EARTH_RADIUS = 6378.137;
+
+//Matrix3 rotationMatrixFromOrientationVector(Vector3 o) {
+//    Matrix4 m = Matrix4.zero();
+//    simpleSensor.getOrientation(m);
+//
+//    return Matrix3(
+//            cos(o.x)*cos(o.z) - sin(o.x)*cos(o.y)*sin(o.z),
+//            sin(o.x)*cos(o.z) + cos(o.y)*cos(o.x)*sin(o.z),
+//            sin(o.y)*sin(o.z),
+//            -cos(o.x)*sin(o.z) - cos(o.y)*sin(o.x)*cos(o.z),
+//            -sin(o.x)*sin(o.z) + cos(o.y)*cos(o.x)*cos(o.z),
+//            sin(o.y)*cos(o.z),
+//            sin(o.x)*sin(o.y),
+//            -cos(o.x)*sin(o.y),
+//            cos(o.y));
+//}
+
+//// Calculate distance travelled and final speed from acceleration, initial speed and time.
+//// Acceleration is m/s**2
+//// Speed is m/s
+//// Time is in milliseconds
+//// Output distance is in metres
+//void calculateDistanceAndSpeed(double accel, double initialSpeed, int time, double* distanceAndSpeed) {
+//    double finalSpeed   = initialSpeed + (accel*time)/1000.0;
+//    distanceAndSpeed[0] = finalSpeed;
+//    distanceAndSpeed[1] = (initialSpeed + finalSpeed)*0.5*(time/1000.0);
+//}
+//
+//// Calculate the new lat/lon from the current lat/lon and x/y distance (x - NorthSouth, y - EastWest)
+//// https://stackoverflow.com/questions/7477003/calculating-new-longitude-latitude-from-old-n-meters
+//// Latitude:
+////    var earth = 6378.137,  //radius of the earth in kilometer
+////       pi = Math.PI,
+////       m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree`
+////    var new_latitude = latitude + (your_meters * m);
+//// Longitude:
+////   var earth = 6378.137,  //radius of the earth in kilometer
+////      pi = Math.PI,
+////      cos = Math.cos,
+////      m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree
+////   var new_longitude = longitude + (your_meters * m) / cos(latitude * (pi / 180));
+//void calculateNewLatLon(double* currentLatLon, double xDistance, double yDistance, double* newLatLon) {
+//    newLatLon[0] = currentLatLon[0] + (xDistance*ONE_METRE);
+//    newLatLon[1] = currentLatLon[1] + (yDistance*ONE_METRE)/(cos((currentLatLon[1]*M_PI)/180.0));
+//}
+//
+//void reportUpdatedPosition((CMAccelerometerData*)accelerometerData) {
+//    double[2] xDistanceAndSpeed;
+//    double[2] yDistanceAndSpeed;
+//    double[2] newLatLon;
+//
+//    CMMotionManager  *motionManager = [[CMMotionManager alloc] init];
+//    CMRotationMatrix rotationMatrix = motionManager.deviceMotion.attitude.rotationMatrix;
+//
+//    double accelX = rotationMatrix.m11 * accelerometerData.acceleration.x +
+//                    rotationMatrix.m12 * accelerometerData.acceleration.y +
+//                    rotationMatrix.m13 * accelerometerData.acceleration.z;
+//    double accelY = rotationMatrix.m21 * accelerometerData.acceleration.x +
+//                    rotationMatrix.m22 * accelerometerData.acceleration.y +
+//                    rotationMatrix.m23 * accelerometerData.acceleration.z;
+//
+//    calculateDistanceAndSpeed(accelX, _previousXSpeed, interval, xDistanceAndSpeed);
+//    calculateDistanceAndSpeed(accelY, _previousYSpeed, interval, yDistanceAndSpeed);
+//    calculateNewLatLon(prevLatLon, distanceX, distanceY, newLatLon);
+//
+//    // Send the event on
+//    NSMutableDictionary *coordinates = [NSMutableDictionary dictionaryWithCapacity:9];
+//    coordinates[@"reason"] = @"COORDINATE_UPDATE";
+//    coordinates[@"walk_name"] = walkName;
+//    coordinates[@"latitude"] = [NSNumber numberWithDouble:newLatLon[0]];
+//    coordinates[@"longitude"] = [NSNumber numberWithDouble:newPatLon[1]];
+//    coordinates[@"accuracy"] = [NSNumber numberWithDouble:0.0];
+//    coordinates[@"speed"] = [NSNumber numberWithDouble:sqrt(xDistanceAndSpeed[1]**2 + yDistanceAndSpeed[1]**2)];
+//    coordinates[@"heading"] = [NSNumber numberWithDouble:];  // atan(xDistanceAndSpeed[0]/yDistanceAndSpeed[0]) - but watch out as Y approaches 0!!!!
+//    coordinates[@"distance"] = [NSNumber numberWithDouble:sqrt(xDistanceAndSpeed[0]**2 + yDistanceAndSpeed[0]**2)];
+//    coordinates[@"fix_valid"] = [NSNumber numberWithBool:true];
+//    [trackerEventHandler _eventSink(coordinates)];
+//
+//    prevXSpeed    = xDistanceAndSpeed[1];
+//    prevYSpeed    = yDistanceAndSpeed[1];
+//    prevLatLon[0] = newLatLon[0];
+//    prevLatLon[1] = newLatLon[1];
+//}
+
+//// Calculate the new lat/lon from the current lat/lon and x/y distance (x - NorthSouth, y - EastWest)
+//// https://stackoverflow.com/questions/7477003/calculating-new-longitude-latitude-from-old-n-meters
+//// Latitude:
+////    var earth = 6378.137,  //radius of the earth in kilometer
+////       pi = Math.PI,
+////       m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree`
+////    var new_latitude = latitude + (your_meters * m);
+//// Longitude:
+////   var earth = 6378.137,  //radius of the earth in kilometer
+////      pi = Math.PI,
+////      cos = Math.cos,
+////      m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree
+////   var new_longitude = longitude + (your_meters * m) / cos(latitude * (pi / 180));
+//LatLng newPosition(LatLng currentPosition, double x, double y) {
+//    var oneMetre  = (1.0 / ((2.0 * pi / 360) * EARTH_RADIUS)) / 1000;
+//    var newLat = currentPosition.latitude + (x*oneMetre);
+//    var newLon = currentPosition.longitude + (x*oneMetre)/(cos(currentPosition.longitudeInRad));
+//    return LatLng(newLat, newLon);
+//}
+//
+//void calculateLocation(Vector3 orientation, Vector3 acceleration) {
+//    if (_previousReportTime >= 0) {
+//        int now = DateTime.now().millisecondsSinceEpoch;
+//        int interval = now - _previousReportTime;
+
+/*
+coordinates[@"speed"] = [NSNumber numberWithDouble:location.speed];
+coordinates[@"heading"] = [NSNumber numberWithDouble:location.course];
+
+double prevXSpeed;
+double prevYSpeed;
+When we get a GPS fix:
+  prevXSpeed = location.speed*cos(location.course);
+  prevYSpeed = location.speed*sin(location.course);
+Speed is M/Sec
+Course is in degrees and is relative to due North
+
+CMMotionManager *motionManager = [[CMMotionManager alloc] init];
+CMRotationMatrix rotationMatrix = motionManager.deviceMotion.attitude.rotationMatrix;
+
+                    double accelX = rotationMatrix.m11*accelerometerData.acceleration.x +
+                             rotationMatrix.m12*accelerometerData.acceleration.y +
+                             rotationMatrix.m13*accelerometerData.acceleration.z;
+                    double accelY = rotationMatrix.m21*accelerometerData.acceleration.x +
+                             rotationMatrix.m22*accelerometerData.acceleration.y +
+                             rotationMatrix.m23*accelerometerData.acceleration.z;
+                    double accelZ = rotationMatrix.m31*accelerometerData.acceleration.x +
+                             rotationMatrix.m32*accelerometerData.acceleration.y +
+                             rotationMatrix.m33*accelerometerData.acceleration.z;
+*/
+
+//        Matrix3 transformer = rotationMatrixFromOrientationVector(
+//                Vector3(radians(orientation.x), radians(orientation.y),
+//                        radians(orientation.z))
+//        );
+//        transformer.transform(acceleration);
+//
+//        List<double> distAndSpeed = calculateDistanceAndSpeed(
+//                acceleration.x, _previousXSpeed, interval);
+//        _distanceX = _distanceX + distAndSpeed[0];
+//        _previousXSpeed = distAndSpeed[1];
+//        distAndSpeed =
+//                calculateDistanceAndSpeed(acceleration.y, _previousYSpeed, interval);
+//        _distanceY = _distanceY + distAndSpeed[0];
+//        _previousYSpeed = distAndSpeed[1];
+//        distAndSpeed =
+//                calculateDistanceAndSpeed(acceleration.z, _previousZSpeed, interval);
+//        _distanceZ = distAndSpeed[0];
+//        _previousZSpeed = _distanceZ + distAndSpeed[1];
+//
+//        _previousReportTime = now;
+//        var f = NumberFormat("#.#######", "en_UK");
+//        LatLng estimate = newPosition(_prevLatLng, _distanceX, _distanceY);
+//
+//        if (!_paused) {
+//            setState(() {
+//                _inLatLon = "in lat ${f.format(estimate.latitude)} lon ${f.format(
+//                estimate.longitude)}";
+//            _inDistance =
+//                    "in X ${f.format(_distanceX)} Y ${f.format(_distanceY)}";
+//        });
+//    }
+//}
+//}

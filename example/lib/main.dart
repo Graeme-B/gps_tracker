@@ -12,10 +12,10 @@ import 'package:intl/intl.dart';
  * So, how does this all hang together?
  *
  * Android:
- *  1) There's a service - GpsTrackerService - which runs all the time.
+ *  1) There's a service - GpsTrackerService - which runs when the app is in the backgound.
  *     This runs as a foreground service (needed so it isn't swapped out)
  *     It needs a notification channel for this, so the user knows it's running
- *     It's started from the plugin
+ *     It's started from the plugin, on command from the controlling app (main.dart)
  *     It communicates with the plugin by sending broadcasts
  *  2) There's a plugin - GpsTrackerPlugin - which runs when the app runs
  *     This starts and stops the service on command
@@ -50,6 +50,14 @@ import 'package:intl/intl.dart';
  *
  *   When tracking, the gps_tracker dart code adds track points to the database
  *   (not sure how this works when the foreground app is switched out, but it does!)
+ *
+ *   To do:
+ *   - Update gps_tracker.dart to extract the provider (GPS or INS) and the timestamp
+ *   - Update both IOS and Android to calculate the INS distances every 100 ms (configurable)
+ *     running from a timer
+ *   - update main.dart to allow uploads of the waypoints
+ *
+ *   Then write a react app to allow selection of start/stop and playback speed...and see what happens...
  */
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -383,7 +391,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _startService() async {
     if (!serviceStarted) {
       GpsTracker.addGpsListener(_GPSlistener);
-//      GpsTracker.addAccelerometerListener(_accelerometerListener);
+      GpsTracker.addAccelerometerListener(_accelerometerListener);
       await GpsTracker.start(
         title: "GPS Tracker",
         text: "Text",
@@ -476,7 +484,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _GPSlistener(dynamic o) {
-    print("MAIN - GPS tracker update"); // - reason $reason status $status lat $lat lon $lon");
+    // print("MAIN - GPS tracker update for reason $reason",); // - reason $reason status $status lat $lat lon $lon");
     // print("type "  + o.runtimeType.toString());
     // Map retval = o as Map;
     // print("retval type "  + retval.runtimeType.toString());
@@ -485,6 +493,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     //   print("k $k v $v");
     // });
     Map map = o as Map;
+    var provider = map["provider"];
+
     var reason = map["reason"];
     var fixValid = map["fix_valid"] as bool;
     if (reason == "COORDINATE_UPDATE") {
@@ -492,9 +502,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       var longitude = map["longitude"] as num;
       var accuracy = map["accuracy"] as num;
       var speed = map["speed"] as num;
-      print("COORDINATE UPDATE - latitude $latitude longitude $longitude speed $speed accuracy $accuracy fix_valid $fixValid");
+      // print("COORDINATE UPDATE - latitude $latitude longitude $longitude speed $speed accuracy $accuracy fix_valid $fixValid");
     } else {
-      print("FIX UPDATE - fix valid $fixValid");
+      // print("FIX UPDATE - fix valid $fixValid");
     }
   }
 
@@ -512,7 +522,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     var x = map["accelerometerX"] as num;
     var y = map["accelerometerY"] as num;
     var z = map["accelerometerZ"] as num;
-    print("ACCELEROMETER UPDATE - x $x y $y z $z");
+    // print("ACCELEROMETER UPDATE - x $x y $y z $z");
   }
 
   Future<void> _stopTracking() async {

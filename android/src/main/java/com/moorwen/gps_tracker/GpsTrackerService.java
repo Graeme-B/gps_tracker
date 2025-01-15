@@ -40,6 +40,7 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
     private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 1;    // 1 meter
     private static final long MIN_TIME_BW_UPDATES             = 1000; // 1 second
     private static final int  TIMER_TICK                      = 500;
+    private static final int  REPORTING_INTERVAL              = 100;
 
     static final String LOCATION_UPDATE = "com.moorwen.coursewalker.LocationUpdate";
     static final String WALK_NAME       = "walk_name";
@@ -230,7 +231,7 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
                 mBuilder.setChannelId(NOTIFICATION_CHANNEL_ID);
                 mNotifyManager.notify(1, mBuilder.build());
             }
-            timerHandler.postDelayed(timerRunnable, 0);
+//            timerHandler.postDelayed(timerRunnable, 0);
         }
         else if (intent.getAction().equals( GpsTrackerPlugin.STOPFOREGROUND_ACTION)) {
             Log.d("GPSService", "Stop");
@@ -264,10 +265,6 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
         elapsedTime   = 0;
         prevTime      = System.currentTimeMillis();
         this.walkName = walkName;
-        paused        = false;
-        distance      = 0.0;
-        elapsedTime   = 0;
-        prevTime      = System.currentTimeMillis();
         walkTrack.clear();
         if (currLocation == null)
         {
@@ -528,7 +525,7 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
 //        Log.d("GPSService", String.format("onSensorChanged - sensor %d", event.sensor.getType()));
         if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
             System.arraycopy(event.values, 0, accelerometerReading,0, accelerometerReading.length);
-            if (System.currentTimeMillis() - mSensorTimeStamp > 1000) {
+            if (System.currentTimeMillis() - mSensorTimeStamp > REPORTING_INTERVAL) {
                 mSensorTimeStamp = System.currentTimeMillis();
                 Log.d("GPSService", String.format("Sensor changed.....time %d",mSensorTimeStamp));
             }
@@ -578,3 +575,112 @@ public class GpsTrackerService extends Service implements LocationListener, Sens
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
     }
 }
+
+// - Get initial GPS fix
+// - Set previous report time so we know we're tracking
+// - When we get a sensor update, calcualte lat/long from IN values and broadcast location change
+// - When we get a GPS fix, update lat/long and broadcast location change
+// - Provider is set to IN or GPS
+//
+//static const double EARTH_RADIUS = 6378.137;
+//
+//// Pass in accel and magnetometer
+//// Get out normalised acceleration vector
+//// Rotation matrix based on current readings from accelerometer and magnetometer.
+//            final float[] rotationMatrix = new float[9];
+//            mSensorManager.getRotationMatrix(rotationMatrix, null,
+//                    accelerometerReading, magnetometerReading);
+// final float[] normalisedAccel = new float[3];
+// normalisedAccl[0] = rotationMatrix[0]*accel[0] + rotationMatrix[1]*accel[1] + rotationMatrix[2]*accel[2];
+// normalisedAccl[1] = rotationMatrix[3]*accel[0] + rotationMatrix[4]*accel[1] + rotationMatrix[5]*accel[2];
+// normalisedAccl[2] = rotationMatrix[6]*accel[0] + rotationMatrix[7]*accel[1] + rotationMatrix[8]*accel[2];
+//
+//
+//
+//Matrix3 rotationMatrixFromOrientationVector(Vector3 o) {
+//    Matrix4 m = Matrix4.zero();
+//    simpleSensor.getOrientation(m);
+//
+//    return Matrix3(
+//            cos(o.x)*cos(o.z) - sin(o.x)*cos(o.y)*sin(o.z),
+//            sin(o.x)*cos(o.z) + cos(o.y)*cos(o.x)*sin(o.z),
+//            sin(o.y)*sin(o.z),
+//            -cos(o.x)*sin(o.z) - cos(o.y)*sin(o.x)*cos(o.z),
+//            -sin(o.x)*sin(o.z) + cos(o.y)*cos(o.x)*cos(o.z),
+//            sin(o.y)*cos(o.z),
+//            sin(o.x)*sin(o.y),
+//            -cos(o.x)*sin(o.y),
+//            cos(o.y));
+//}
+//
+//// Calculate distance travelled and final speed from acceleration, initial speed and time.
+//// Acceleration is m/s**2
+//// Speed is m/s
+//// Time is in milliseconds
+//// Output distance is in metres
+//List<double> calculateDistanceAndSpeed(double accel, double initialSpeed, int time) {
+//    var distanceAndSpeed = <double>[0.0,0.0];
+//    double finalSpeed = initialSpeed + (accel*time)/1000.0;
+//    distanceAndSpeed[0] = finalSpeed;
+//    distanceAndSpeed[1] = (initialSpeed + finalSpeed)*0.5*(time/1000.0);
+//
+//    return distanceAndSpeed;
+//}
+//
+//// Calculate the new lat/lon from the current lat/lon and x/y distance (x - NorthSouth, y - EastWest)
+//// https://stackoverflow.com/questions/7477003/calculating-new-longitude-latitude-from-old-n-meters
+//// Latitude:
+////    var earth = 6378.137,  //radius of the earth in kilometer
+////       pi = Math.PI,
+////       m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree`
+////    var new_latitude = latitude + (your_meters * m);
+//// Longitude:
+////   var earth = 6378.137,  //radius of the earth in kilometer
+////      pi = Math.PI,
+////      cos = Math.cos,
+////      m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree
+////   var new_longitude = longitude + (your_meters * m) / cos(latitude * (pi / 180));
+//LatLng newPosition(LatLng currentPosition, double x, double y) {
+//    var oneMetre  = (1.0 / ((2.0 * pi / 360) * EARTH_RADIUS)) / 1000;
+//    var newLat = currentPosition.latitude + (x*oneMetre);
+//    var newLon = currentPosition.longitude + (x*oneMetre)/(cos(currentPosition.longitudeInRad));
+//    return LatLng(newLat, newLon);
+//}
+//
+//void calculateLocation(Vector3 orientation, Vector3 acceleration) {
+//    if (_previousReportTime >= 0) {
+//        int now = DateTime.now().millisecondsSinceEpoch;
+//        int interval = now - _previousReportTime;
+//        Matrix3 transformer = rotationMatrixFromOrientationVector(
+//                Vector3(radians(orientation.x), radians(orientation.y),
+//                        radians(orientation.z))
+//        );
+//        transformer.transform(acceleration);
+//
+//        List<double> distAndSpeed = calculateDistanceAndSpeed(
+//                acceleration.x, _previousXSpeed, interval);
+//        _distanceX = _distanceX + distAndSpeed[0];
+//        _previousXSpeed = distAndSpeed[1];
+//        distAndSpeed =
+//                calculateDistanceAndSpeed(acceleration.y, _previousYSpeed, interval);
+//        _distanceY = _distanceY + distAndSpeed[0];
+//        _previousYSpeed = distAndSpeed[1];
+//        distAndSpeed =
+//                calculateDistanceAndSpeed(acceleration.z, _previousZSpeed, interval);
+//        _distanceZ = distAndSpeed[0];
+//        _previousZSpeed = _distanceZ + distAndSpeed[1];
+//
+//        _previousReportTime = now;
+//        var f = NumberFormat("#.#######", "en_UK");
+//        LatLng estimate = newPosition(_prevLatLng, _distanceX, _distanceY);
+//
+//        if (!_paused) {
+//            setState(() {
+//                _inLatLon = "in lat ${f.format(estimate.latitude)} lon ${f.format(
+//                estimate.longitude)}";
+//            _inDistance =
+//                    "in X ${f.format(_distanceX)} Y ${f.format(_distanceY)}";
+//        });
+//    }
+//}
+//}

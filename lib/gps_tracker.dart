@@ -226,10 +226,12 @@ class GpsTracker {
 
       Map map = o as Map;
 
-      map.forEach((k, v) => print("Key : $k, Value : $v"));
+      // map.forEach((k, v) => print("Key : $k, Value : $v"));
 
       var reason = map["reason"];
       if (reason == "COORDINATE_UPDATE") {
+        var provider = map["provider"];
+        print("GPS_TRACKER - GPS update from provider $provider");
         var walkName = map["walk_name"];
         if (walkName != null && walkName.toString().isNotEmpty) {
           List<WalkTrackPoint> waypoints = [];
