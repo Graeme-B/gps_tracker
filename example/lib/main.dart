@@ -1,12 +1,17 @@
 // import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'dart:async';
+import "dart:convert" show utf8;
+import "dart:io";
 
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:gps_tracker/gps_tracker.dart';
 import 'package:gps_tracker_db/gps_tracker_db.dart';
 import 'package:intl/intl.dart';
+import "package:uuid/uuid.dart";
+
+import 'upload_results.dart';
 
 /**
  * So, how does this all hang together?
@@ -87,6 +92,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   String _numWalkTrackPoints = 'Unknown points.';
   String _distance = 'Unknown distance.';
   Timer? _timer;
+  String _walkName = '';
   bool serviceStarted = false;
   bool tracking = false;
 
@@ -277,6 +283,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   child: const Text('Get Accuracy Level'),
                 ),
                 Text(_accuracyLevel),
+                ElevatedButton(
+                  onPressed: _upload,
+                  child: const Text('Upload'),
+                ),
                 Row(children: <Widget>[
                   const Spacer(flex: 10),
                   startServiceButton,
@@ -359,7 +369,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           showDialog(
               context: context,
               builder: (BuildContext context) {
-                return const LoginSucessDialog(fred: 'Status');
+                return const MessageDialog(fred: 'Status');
               }).then((val) {
             // Navigator.pop(context);
             if (val) {
@@ -375,7 +385,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         showDialog(
             context: context,
             builder: (BuildContext context) {
-              return const LoginSucessDialog(fred: 'Status');
+              return const MessageDialog(fred: 'Status');
             }).then((val) {
           // Navigator.pop(context);
           if (val) {
@@ -391,7 +401,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _startService() async {
     if (!serviceStarted) {
       GpsTracker.addGpsListener(_GPSlistener);
-      GpsTracker.addAccelerometerListener(_accelerometerListener);
       await GpsTracker.start(
         title: "GPS Tracker",
         text: "Text",
@@ -406,7 +415,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _stopService() async {
     if (serviceStarted) {
       GpsTracker.removeGpsListener(_GPSlistener);
-      GpsTracker.removeAccelerometerListener(_accelerometerListener);
       GpsTracker.stop();
       serviceStarted = false;
     }
@@ -470,14 +478,49 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _upload() async {
+    print("Upload looking for walk ${_walkName}");
+    var db = await DatabaseHelper.getDatabaseHelper();
+
+    late UploadResults results;
+
+    // Get the current walk
+    final Walk walk  = await db.getWalk(_walkName);
+    const Uuid uuid  = Uuid();
+    final String uid = uuid.v1(); // Generate a v1 (time-based) id
+
+    final String json = '{"device_uuid": "device_uuid","name": "${_walkName}", "year": ${DateFormat("yyyy").format(DateTime.now())}, "country": "Country", "user": "Uploaded by","email": "Email", "class": "Class","uuid": "$uid", "walk":${walk.toJson()}}';
+
+    const String url                = "http://wamm.me.uk/TrackUpload/walk_upload.php";
+    final HttpClient httpClient     = HttpClient();
+    final HttpClientRequest request = await httpClient.postUrl(Uri.parse(url));
+    // request.headers.set('content-type', 'application/json; charset="UTF-8"');
+    request.headers.set("content-type", 'text/html; charset="UTF-8"');
+    // request.add(utf8.encode(json));
+    request.write(utf8.encode(json));
+    // request.write(json);
+    final HttpClientResponse response = await request.close();
+    // todo - you should check the response.statusCode
+    int status = response.statusCode;
+    final String reply = await response.transform(utf8.decoder).join();
+    results = UploadResults(status,reply);
+    httpClient.close();
+
+    results.status = status;
+    print("Upload finished with status ${status}");
+
+  }
+
   Future<void> _startTracking() async {
     if (serviceStarted && !tracking) {
       var db = await DatabaseHelper.getDatabaseHelper();
       DateTime now = DateTime.now();
-      String formattedDate = DateFormat("yyyy-MM-dd HH:mm:ss").format(now);
-      await db.addWalk(formattedDate);
-      GpsTracker.startTracking(formattedDate);
+      _walkName = DateFormat("yyyy-MM-dd HH:mm:ss").format(now);
+      await db.addWalk(_walkName);
+      GpsTracker.startTracking(_walkName);
       tracking = true;
+      print("Tracking for walk ${_walkName}");
+
 //    startTimer();
     }
     _actionsWhenTrackingStarted();
@@ -506,23 +549,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     } else {
       // print("FIX UPDATE - fix valid $fixValid");
     }
-  }
-
-  void _accelerometerListener(dynamic o) {
-    // print("MAIN - Accelerometer update");
-    // print("type "  + o.runtimeType.toString());
-    // Map retval = o as Map;
-    // print("retval type "  + retval.runtimeType.toString());
-    // retval.forEach((k,v) {
-    //   print("k type " + k.runtimeType.toString() + " v type " + v.runtimeType.toString());
-    //   print("k $k v $v");
-    // });
-    Map map = o as Map;
-    var reason = map["reason"];
-    var x = map["accelerometerX"] as num;
-    var y = map["accelerometerY"] as num;
-    var z = map["accelerometerZ"] as num;
-    // print("ACCELEROMETER UPDATE - x $x y $y z $z");
   }
 
   Future<void> _stopTracking() async {
@@ -628,15 +654,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
-class LoginSucessDialog extends StatefulWidget {
+class MessageDialog extends StatefulWidget {
   final String fred;
 
-  const LoginSucessDialog({super.key, required this.fred});
+  const MessageDialog({super.key, required this.fred});
   @override
-  _LoginSucessDialogState createState() => _LoginSucessDialogState();
+  _MessageDialogState createState() => _MessageDialogState();
 }
 
-class _LoginSucessDialogState extends State<LoginSucessDialog> {
+class _MessageDialogState extends State<MessageDialog> {
   @override
   Widget build(BuildContext context) {
     // return Dialog(

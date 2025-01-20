@@ -20,6 +20,10 @@ dependencies:
   gps_tracker_db:
     path: /Users/macbook/StudioProjects/gps_tracker_db
   shared_preferences: ^2.0.18
+  # connectivity_plus: ^6.0.5
+  connectivity_plus: ^5.0.2
+  uuid: ^4.2.1
+
 dev_dependencies:
   integration_test:
     sdk: flutter

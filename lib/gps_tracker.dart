@@ -39,9 +39,6 @@ class GpsTracker {
   static const EventChannel _gpsTrackerEventChannel = const EventChannel(
       'com.moorwen.flutter.gps_tracker/gps_tracker_event_channel');
   static StreamSubscription? gpsTrackerStreamSubscription;   // ignore: cancel_subscriptions
-  static const EventChannel _accelerometerEventChannel = const EventChannel(
-      'com.moorwen.flutter.gps_tracker/accelerometer_event_channel');
-  static StreamSubscription? accelerometerStreamSubscription;   // ignore: cancel_subscriptions
   static int tracking = TRACKING_OFF;
 
   // Testing and information
@@ -209,17 +206,6 @@ class GpsTracker {
     eventChannelStreamSubscription = null;
   }
 
-  static Future<void> addAccelerometerListener(_listener) async {
-    var s = _accelerometerEventChannel.receiveBroadcastStream();
-    accelerometerStreamSubscription = s.listen(_listener);
-  }
-
-  static Future<void> removeAccelerometerListener(_listener) async {
-    if (accelerometerStreamSubscription != null)
-      accelerometerStreamSubscription!.cancel();
-    accelerometerStreamSubscription = null;
-  }
-
   static void _listener(dynamic o) async {
     if (tracking == TRACKING) {
       var db = await DatabaseHelper.getDatabaseHelper();
@@ -231,7 +217,7 @@ class GpsTracker {
       var reason = map["reason"];
       if (reason == "COORDINATE_UPDATE") {
         var provider = map["provider"];
-        print("GPS_TRACKER - GPS update from provider $provider");
+        print("GPS_TRACKER - GPS update from provider $provider lat ${ map["latitude"]} lon ${ map["longitude"]}");
         var walkName = map["walk_name"];
         if (walkName != null && walkName.toString().isNotEmpty) {
           List<WalkTrackPoint> waypoints = [];
@@ -242,9 +228,9 @@ class GpsTracker {
               distance: map["distance"] as double,
               speed: map["speed"] as double,
               heading: map["heading"]  as double,
-              provider: "gps",
+              provider: map["provider"] as String,
               accuracy: map["accuracy"] as double,
-              elapsed_time: 0);
+              elapsed_time: map["elapsedTime"] as int);
           waypoints.add(wtp);
           try {
             await db.addWalkTrackPoints(walkName, waypoints);
