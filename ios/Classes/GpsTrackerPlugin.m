@@ -12,6 +12,7 @@ double         prevLatLon[2];
 bool           firstGPSFix = false;
 CFAbsoluteTime prevTime;
 CFAbsoluteTime startTime;
+NSTimer *timer = nil;
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   FlutterMethodChannel* methodChannel = [FlutterMethodChannel
@@ -138,12 +139,17 @@ CFAbsoluteTime startTime;
       [accelerometerEventHandler setWalkName:_walkName];
       [accelerometerEventHandler setMotionManager:self.motionManager];
       NSOperationQueue *queue = [[NSOperationQueue alloc] init];
-      [self.motionManager startAccelerometerUpdatesToQueue:queue withHandler:^(
-              CMAccelerometerData *accelerometerData, NSError *error) {
-          dispatch_async(dispatch_get_main_queue(), ^{
-              [accelerometerEventHandler updateAccelerometer:accelerometerData];
-          });
-      }];
+//      [self.motionManager startAccelerometerUpdatesToQueue:queue withHandler:^(
+//              CMAccelerometerData *accelerometerData, NSError *error) {
+//          dispatch_async(dispatch_get_main_queue(), ^{
+//              [accelerometerEventHandler updateAccelerometer:accelerometerData];
+//          });
+//      }];
+      timer = [NSTimer scheduledTimerWithTimeInterval:0.5
+                                       target:self
+                                     selector:@selector(targetMethod:)
+                                     userInfo:nil
+                                      repeats:YES];
   } else if ([@"stopTracking" isEqualToString:call.method]) {
       _walkName = nil;
       [accelerometerEventHandler setWalkName:_walkName];
@@ -151,6 +157,8 @@ CFAbsoluteTime startTime;
       if ([self.motionManager isAccelerometerActive] == YES) {
           [self.motionManager stopAccelerometerUpdates];
       }
+      [timer invalidate];
+      timer = nil;
   } else if ([@"getLocation" isEqualToString:call.method]) {
       double posn[2];
       posn[0] = _position.coordinate.latitude;
@@ -228,6 +236,17 @@ CFAbsoluteTime startTime;
         }
         first = false;
     }
+}
+
+- (void)targetMethod:(NSTimer*)theTimer {
+    NSLog(@"Timer started on %6.2f", CFAbsoluteTimeGetCurrent());
+    CMRotationMatrix rotationMatrix = self.motionManager.deviceMotion.attitude.rotationMatrix;
+    CMAcceleration accelerometerData = self.motionManager.deviceMotion.userAcceleration;
+
+    NSLog(@"GPSTracker - timer matrix [%6.2f,%6.2f,%6.2f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
+    NSLog(@"GPSTracker -              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
+    NSLog(@"GPSTracker -              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
+    NSLog(@"GPSTracker - timer accel [%6.2f,%6.2f,%6.2f]", accelerometerData.x, accelerometerData.y, accelerometerData.z);
 }
 
 - (void)locationManager:(CLLocationManager *)manager didChangeAuthorizationStatus:(CLAuthorizationStatus)status {
