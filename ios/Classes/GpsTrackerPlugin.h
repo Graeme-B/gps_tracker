@@ -24,25 +24,5 @@ int const    DISTANCE_INDEX     = 1;
 @property (strong) FlutterEventSink _Nullable     eventSink;
 @end
 
-@interface AccelerometerEventHandler : NSObject<FlutterStreamHandler>
-- (void)updateAccelerometer:(CMAccelerometerData*)accelerometerData;
-- (void)calculateDistanceAndSpeed:(double) accel: (double) initialSpeed: (int) time: (double*) distanceAndSpeed;
-- (void)calculateNewLatLon:(double*) currentLatLon: (double) xDistance: (double) yDistance: (double*) newLatLon;
-- (void)calculateNewLatLon:(double*) currentLatLon: (double) xDistance: (double) yDistance: (double*) newLatLon;
-- (void)reportUpdatedPosition:(CMAccelerometerData*)accelerometerData;
-- (void)setWalkName: (NSString*) walkName;
-@property (strong) NSString * _Nonnull walkName;
-@property (nonatomic, strong) CMMotionManager * _Nullable motionManager;
-
-@end
-
 @interface GpsTrackerPlugin : NSObject<FlutterPlugin,CLLocationManagerDelegate>
-@property (nonatomic, strong) CLLocationManager * _Nullable locationManager;
-@property (nonatomic, strong) CMMotionManager * _Nullable motionManager;
-@property (strong) CLLocation * _Nullable position;
-
-@property (strong) NSString * _Nonnull walkName;
-@property (strong) NSMutableArray * _Nullable locations;
-@property double distance;
-@property bool paused;
 @end

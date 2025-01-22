@@ -2,17 +2,23 @@
 
 @implementation GpsTrackerPlugin
 
-GpsTrackerEventHandler    *eventHandler;
-GpsTrackerEventHandler    *trackerEventHandler;
-AccelerometerEventHandler *accelerometerEventHandler;
+GpsTrackerEventHandler *eventHandler;
+GpsTrackerEventHandler *trackerEventHandler;
 
-double         prevXSpeed;
-double         prevYSpeed;
-double         prevLatLon[2];
-bool           firstGPSFix = false;
-CFAbsoluteTime prevTime;
-CFAbsoluteTime startTime;
-NSTimer *timer = nil;
+double             prevXSpeed;
+double             prevYSpeed;
+double             prevLatLon[2];
+double             savedDistance;
+bool               paused;
+bool               firstGPSFix = false;
+CFAbsoluteTime     prevTime;
+CFAbsoluteTime     startTime;
+NSTimer*           timer = nil;
+CLLocationManager* myLocationManager;
+CMMotionManager*   myMotionManager;
+CLLocation*        savedPosition;
+NSString*          walkName;
+NSMutableArray*    savedLocations;
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   FlutterMethodChannel* methodChannel = [FlutterMethodChannel
@@ -33,7 +39,6 @@ NSTimer *timer = nil;
       binaryMessenger:[registrar messenger]];
   [trackerEventChannel setStreamHandler:trackerEventHandler];
 
-  accelerometerEventHandler = [[AccelerometerEventHandler alloc] init];
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -43,7 +48,7 @@ NSTimer *timer = nil;
       result(@((int) ([myDevice batteryLevel] * 100.0)));
 
   } else if ([@"getAttitude" isEqualToString:call.method]) {
-      CMQuaternion q = self.motionManager.deviceMotion.attitude.quaternion;
+      CMQuaternion q = myMotionManager.deviceMotion.attitude.quaternion;
       double quat[4];
       quat[0] = q.w;
       quat[1] = q.x;
@@ -72,105 +77,72 @@ NSTimer *timer = nil;
     }
     result(@(auth));
   } else if ([@"start" isEqualToString:call.method]) {
-    if (self.locationManager == nil) {
-        self.locationManager = [[CLLocationManager alloc] init];
-//      self.locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters;
-//      self.locationManager.desiredAccuracy = kCLLocationAccuracyBest;
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation;
-        self.locationManager.distanceFilter = kCLDistanceFilterNone;
-        self.locationManager.allowsBackgroundLocationUpdates = YES;
-        self.locationManager.delegate = self;
-        [self.locationManager startUpdatingLocation];
+    if (myLocationManager == nil) {
+        myLocationManager = [[CLLocationManager alloc] init];
+//      myLocationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters;
+//      myLocationManager.desiredAccuracy = kCLLocationAccuracyBest;
+        myLocationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation;
+        myLocationManager.distanceFilter = kCLDistanceFilterNone;
+        myLocationManager.allowsBackgroundLocationUpdates = YES;
+        myLocationManager.delegate = self;
+        [myLocationManager startUpdatingLocation];
 
-        self.motionManager = [[CMMotionManager alloc] init];
-        if ([self.motionManager isAccelerometerAvailable]) {
-            [self.motionManager setAccelerometerUpdateInterval:REPORTING_INTERVAL];
-            [self.motionManager setDeviceMotionUpdateInterval:REPORTING_INTERVAL];
+        myMotionManager = [[CMMotionManager alloc] init];
+        if ([myMotionManager isAccelerometerAvailable]) {
+            [myMotionManager setAccelerometerUpdateInterval:REPORTING_INTERVAL];
+            [myMotionManager setDeviceMotionUpdateInterval:REPORTING_INTERVAL];
             if (([CMMotionManager availableAttitudeReferenceFrames] & CMAttitudeReferenceFrameXTrueNorthZVertical) != 0){
                 NSLog(@"GPSTracker - available");
             } else {
                 NSLog(@"GPSTracker - NOT available");
             }
 
-            if ([self.motionManager isDeviceMotionAvailable]) {
-                [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame:CMAttitudeReferenceFrameXTrueNorthZVertical];
-
-//                CMDeviceMotionHandler dmHandler = ^(CMDeviceMotion *aMotion, NSError *error) {
-//                    // Check for an error.
-//                    if (error) {
-//                        // Add error handling here.
-//                    } else {
-//                        // Get the rotation matrix.
-//                        CMAttitude *attitude = self.motionManager.deviceMotion.attitude;
-//                        CMRotationMatrix rm = attitude.rotationMatrix;
-//                        NSLog(@"GPSTracker - heading matrix [%6.2f,%6.2f,%6.2f]",rm.m11,rm.m12,rm.m13);
-//                        NSLog(@"GPSTracker -                [%6.2f,%6.2f,%6.2f]",rm.m21,rm.m22,rm.m23);
-//                        NSLog(@"GPSTracker -                [%6.2f,%6.2f,%6.2f]",rm.m31,rm.m32,rm.m33);
-//
-//                        // Get the heading.
-//                        double heading = M_PI + atan2(rm.m22, rm.m12);
-//                        heading = heading*180/M_PI;
-//                        NSLog(@"GPSTracker - heading %45.2f",heading);
-//                    }
-//                };
-//                NSOperationQueue *motionQueue = [[NSOperationQueue alloc] init];
-//                [self.motionManager startDeviceMotionUpdatesUsingReferenceFrame: CMAttitudeReferenceFrameXTrueNorthZVertical
-//                                                                        toQueue: motionQueue
-//                                                                    withHandler: dmHandler];
-//
+            if ([myMotionManager isDeviceMotionAvailable]) {
+                [myMotionManager startDeviceMotionUpdatesUsingReferenceFrame:CMAttitudeReferenceFrameXTrueNorthZVertical];
             }
         }
     }
   } else if ([@"stop" isEqualToString:call.method]) {
-      [self.locationManager stopUpdatingLocation];
-      self.locationManager = nil;
+      [myLocationManager stopUpdatingLocation];
+      myLocationManager = nil;
   } else if ([@"startTracking" isEqualToString:call.method]) {
-      _walkName = call.arguments[@"walkName"];
-      if ([_locationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
-          [_locationManager requestWhenInUseAuthorization];
+      walkName = call.arguments[@"walkName"];
+      if ([myLocationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
+          [myLocationManager requestWhenInUseAuthorization];
       }
-      _locations  = [[NSMutableArray alloc] init];
-      _distance   = 0;
-      _position   = nil;
-      _paused     = false;
-      firstGPSFix = false;
-      startTime   = CFAbsoluteTimeGetCurrent();
+      savedLocations = [[NSMutableArray alloc] init];
+      savedDistance  = 0;
+      savedPosition  = nil;
+      paused         = false;
+      firstGPSFix    = false;
+      startTime      = CFAbsoluteTimeGetCurrent();
 
-      [accelerometerEventHandler setWalkName:_walkName];
-      [accelerometerEventHandler setMotionManager:self.motionManager];
       NSOperationQueue *queue = [[NSOperationQueue alloc] init];
-//      [self.motionManager startAccelerometerUpdatesToQueue:queue withHandler:^(
-//              CMAccelerometerData *accelerometerData, NSError *error) {
-//          dispatch_async(dispatch_get_main_queue(), ^{
-//              [accelerometerEventHandler updateAccelerometer:accelerometerData];
-//          });
-//      }];
-      timer = [NSTimer scheduledTimerWithTimeInterval:0.5
+      timer = [NSTimer scheduledTimerWithTimeInterval:0.1
                                        target:self
-                                     selector:@selector(targetMethod:)
-                                     userInfo:nil
-                                      repeats:YES];
+                                       selector:@selector(targetMethod:)
+                                       userInfo:nil
+                                       repeats:YES];
   } else if ([@"stopTracking" isEqualToString:call.method]) {
-      _walkName = nil;
-      [accelerometerEventHandler setWalkName:_walkName];
-      [self.motionManager stopDeviceMotionUpdates];
-      if ([self.motionManager isAccelerometerActive] == YES) {
-          [self.motionManager stopAccelerometerUpdates];
+      walkName = nil;
+      [myMotionManager stopDeviceMotionUpdates];
+      if ([myMotionManager isAccelerometerActive] == YES) {
+          [myMotionManager stopAccelerometerUpdates];
       }
       [timer invalidate];
       timer = nil;
   } else if ([@"getLocation" isEqualToString:call.method]) {
       double posn[2];
-      posn[0] = _position.coordinate.latitude;
-      posn[1] = _position.coordinate.longitude;
+      posn[0] = savedPosition.coordinate.latitude;
+      posn[1] = savedPosition.coordinate.longitude;
       NSData *data = [NSData dataWithBytes: posn length: sizeof(posn)];
       FlutterStandardTypedData* typedData = [FlutterStandardTypedData typedDataWithFloat64:data];
       result(typedData);
   } else if ([@"getNumWalkTrackPoints" isEqualToString:call.method]) {
-      result(@((int)[_locations count]));
+      result(@((int)[savedLocations count]));
   } else if ([@"getWalkTrackPoints" isEqualToString:call.method]) {
     NSMutableArray *locations = [[NSMutableArray alloc] init];
-    for (CLLocation *location in _locations)
+    for (CLLocation *location in savedLocations)
     {
       double posn[2];
       posn[0] = location.coordinate.latitude;
@@ -181,13 +153,13 @@ NSTimer *timer = nil;
     }
     result(locations);
   } else if ([@"getDistance" isEqualToString:call.method]) {
-    result(@(_distance));
+    result(@(savedDistance));
   } else if ([@"getWalkName" isEqualToString:call.method]) {
-    result(_walkName);
+    result(walkName);
   } else if ([@"pause" isEqualToString:call.method]) {
-      _paused = true;
+      paused = true;
   } else if ([@"resume" isEqualToString:call.method]) {
-      _paused = false;
+      paused = false;
   } else {
     result(FlutterMethodNotImplemented);
   }
@@ -198,7 +170,7 @@ NSTimer *timer = nil;
         return;
     }
 
-    if (_paused) {
+    if (paused) {
         return;
     }
    
@@ -206,47 +178,48 @@ NSTimer *timer = nil;
     for (CLLocation *location in locations)
     {
         double distance = 0.0;
-        if (_position != nil)
+        if (savedPosition != nil)
         {
-            distance = [ _position distanceFromLocation:location];
+            distance = [ savedPosition distanceFromLocation:location];
         }
 //        NSLog(@"GPSTracker - didUpdateLocations time %6.4f distance %6.2f lat %6.6f lon %6.6f accuracy %6.6f",
 //              CACurrentMediaTime(),distance,location.coordinate.latitude,location.coordinate.longitude,location.horizontalAccuracy);
 
-        if (first && _position == nil)
+        if (first && savedPosition == nil)
         {
-            [eventHandler updateLocation:location walkName:_walkName distance:0.0];
-            if (_walkName != nil)
+            [eventHandler updateLocation:location walkName:walkName distance:0.0];
+            if (walkName != nil)
             {
-                [trackerEventHandler updateLocation:location walkName:_walkName distance:0.0];
-                [_locations addObject:location];
+                [trackerEventHandler updateLocation:location walkName:walkName distance:0.0];
+                [savedLocations addObject:location];
             }
-            _position = location;
+            savedPosition = location;
         }
         if (distance >= location.horizontalAccuracy)
         {
-            [eventHandler updateLocation:location walkName:_walkName distance:_distance];
-            if (_walkName != nil)
+            [eventHandler updateLocation:location walkName:walkName distance:savedDistance];
+            if (walkName != nil)
             {
-                [_locations addObject:location];
-                [trackerEventHandler updateLocation:location walkName:_walkName distance:_distance];
-                _distance += distance;
+                [savedLocations addObject:location];
+                [trackerEventHandler updateLocation:location walkName:walkName distance:savedDistance];
+                savedDistance += distance;
             }
-            _position = location;
+            savedPosition = location;
         }
         first = false;
     }
 }
 
 - (void)targetMethod:(NSTimer*)theTimer {
-    NSLog(@"Timer started on %6.2f", CFAbsoluteTimeGetCurrent());
-    CMRotationMatrix rotationMatrix = self.motionManager.deviceMotion.attitude.rotationMatrix;
-    CMAcceleration accelerometerData = self.motionManager.deviceMotion.userAcceleration;
-
-    NSLog(@"GPSTracker - timer matrix [%6.2f,%6.2f,%6.2f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
-    NSLog(@"GPSTracker -              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
-    NSLog(@"GPSTracker -              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
-    NSLog(@"GPSTracker - timer accel [%6.2f,%6.2f,%6.2f]", accelerometerData.x, accelerometerData.y, accelerometerData.z);
+//    NSLog(@"Timer started on %6.2f", CFAbsoluteTimeGetCurrent());
+//    CMRotationMatrix rotationMatrix = myMotionManager.deviceMotion.attitude.rotationMatrix;
+//    CMAcceleration accelerometerData = myMotionManager.deviceMotion.userAcceleration;
+//
+//    NSLog(@"GPSTracker - timer matrix [%6.2f,%6.2f,%6.2f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
+//    NSLog(@"GPSTracker -              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
+//    NSLog(@"GPSTracker -              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
+//    NSLog(@"GPSTracker - timer accel [%6.2f,%6.2f,%6.2f]", accelerometerData.x, accelerometerData.y, accelerometerData.z);
+    [self updateAccelerometer];
 }
 
 - (void)locationManager:(CLLocationManager *)manager didChangeAuthorizationStatus:(CLAuthorizationStatus)status {
@@ -283,8 +256,118 @@ NSTimer *timer = nil;
 }
 
 - (void)stopUpdatingLocationWithMessage:(NSString *)state {
-    [self.locationManager stopUpdatingLocation];
-    self.locationManager.delegate = nil;
+    [myLocationManager stopUpdatingLocation];
+    myLocationManager.delegate = nil;
+}
+
+- (void)updateAccelerometer {
+//    NSMutableDictionary *values = [NSMutableDictionary dictionaryWithCapacity:4];
+//    values[@"reason"] = @"ACCELEROMETER_UPDATE";
+//    values[@"accelerometerX"] = [NSNumber numberWithDouble:accelerometerData.acceleration.x];
+//    values[@"accelerometerY"] = [NSNumber numberWithDouble:accelerometerData.acceleration.y];
+//    values[@"accelerometerZ"] = [NSNumber numberWithDouble:accelerometerData.acceleration.z];
+//    values[@"accelerometerTimestamp"] = 0; // [NSNumber numberWithLong:accelerometerData.accelerometer.timestamp];
+    if (firstGPSFix) {
+        [self reportUpdatedPosition];
+    }
+}
+
+// Calculate distance travelled and final speed from acceleration, initial speed and time.
+// Acceleration is m/s**2
+// Speed is m/s
+// Time is in milliseconds
+// Output distance is in metres
+- (void)calculateDistanceAndSpeed:(double) accel: (double) initialSpeed: (int) time: (double *) distanceAndSpeed {
+    double deltaSpeed                = (accel*time)/1000.0;
+    double finalSpeed                = initialSpeed + deltaSpeed;
+    distanceAndSpeed[SPEED_INDEX]    = finalSpeed;
+    distanceAndSpeed[DISTANCE_INDEX] = (initialSpeed + finalSpeed)*0.5*((double)time/1000.0);
+//    NSLog(@"GPSTracker - accel %6.2f speed %6.2f delta %6.4f time %d final speed %6.2f speed %6.2f distance %6.2f",
+//          accel, initialSpeed, deltaSpeed, time, distanceAndSpeed[SPEED_INDEX], distanceAndSpeed[DISTANCE_INDEX]);
+}
+
+// Calculate the new lat/lon from the current lat/lon and x/y distance (x - NorthSouth, y - EastWest)
+// https://stackoverflow.com/questions/7477003/calculating-new-longitude-latitude-from-old-n-meters
+// Latitude:
+//    var earth = 6378.137,  //radius of the earth in kilometer
+//       pi = Math.PI,
+//       m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree`
+//    var new_latitude = latitude + (your_meters * m);
+// Longitude:
+//   var earth = 6378.137,  //radius of the earth in kilometer
+//      pi = Math.PI,
+//      cos = Math.cos,
+//      m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree
+//   var new_longitude = longitude + (your_meters * m) / cos(latitude * (pi / 180));
+- (void)calculateNewLatLon:(double*) currentLatLon: (double) xDistance: (double) yDistance: (double*) newLatLon {
+    newLatLon[0] = currentLatLon[0] + (xDistance*ONE_METRE);
+    newLatLon[1] = currentLatLon[1] + (yDistance*ONE_METRE)/(cos((currentLatLon[1]*M_PI)/180.0));
+}
+
+- (void)reportUpdatedPosition {
+    double xDistanceAndSpeed[2];
+    double yDistanceAndSpeed[2];
+    double newLatLon[2];
+
+    CFAbsoluteTime   currTime          = CFAbsoluteTimeGetCurrent();
+    CMRotationMatrix rotationMatrix    = myMotionManager.deviceMotion.attitude.rotationMatrix;
+    CMAcceleration   accelerometerData = myMotionManager.deviceMotion.userAcceleration;
+
+
+//    double accelX = rotationMatrix.m11 * accelerometerData.acceleration.x +
+//                    rotationMatrix.m12 * accelerometerData.acceleration.y +
+//                    rotationMatrix.m13 * accelerometerData.acceleration.z;
+//    double accelY = rotationMatrix.m21 * accelerometerData.acceleration.x +
+//                    rotationMatrix.m22 * accelerometerData.acceleration.y +
+//                    rotationMatrix.m23 * accelerometerData.acceleration.z;
+    double accelX = rotationMatrix.m11 * myMotionManager.deviceMotion.userAcceleration.x +
+                    rotationMatrix.m12 * myMotionManager.deviceMotion.userAcceleration.y +
+                    rotationMatrix.m13 * myMotionManager.deviceMotion.userAcceleration.z;
+    double accelY = rotationMatrix.m21 * myMotionManager.deviceMotion.userAcceleration.x +
+                    rotationMatrix.m22 * myMotionManager.deviceMotion.userAcceleration.y +
+                    rotationMatrix.m23 * myMotionManager.deviceMotion.userAcceleration.z;
+//    NSLog(@"GPSTracker - reportUpdatedPosition raw accel [%6.2f,%6.2f,%6.2f] adjusted [%6.2f,%6.2f] speed [%6.2f,%6.2f]",
+//          myMotionManager.deviceMotion.userAcceleration.x,
+//          myMotionManager.deviceMotion.userAcceleration.y,
+//          myMotionManager.deviceMotion.userAcceleration.z,
+//          accelX, accelY, prevXSpeed, prevYSpeed);
+//    NSLog(@"GPSTracker - reportUpdatedPosition matrix [%6.2f,%6.2f,%6.2f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
+//    NSLog(@"GPSTracker -                              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
+//    NSLog(@"GPSTracker -                              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
+
+    long interval = [[NSNumber numberWithDouble:(currTime - prevTime)*1000.0] longValue];
+    [self calculateDistanceAndSpeed:accelX : prevXSpeed : interval : xDistanceAndSpeed];
+    [self calculateDistanceAndSpeed:accelY : prevYSpeed : interval : yDistanceAndSpeed];
+    [self calculateNewLatLon:prevLatLon : xDistanceAndSpeed[DISTANCE_INDEX] : yDistanceAndSpeed[DISTANCE_INDEX] : newLatLon];
+
+    // Calculate the heading, allowing for tan approaching infinity (y approaching 0)
+    double heading = yDistanceAndSpeed[1] > ZERO_TOL ? atan(xDistanceAndSpeed[DISTANCE_INDEX]/yDistanceAndSpeed[SPEED_INDEX]) : 90.0;
+
+//    NSLog(@"GPSTracker - reportUpdatedPosition interval %4d dist[%6.2f,%6.2f] speed [%6.6f,%6.6f] accel[%6.6f,%6.6f] pos [%6.6f,%6.6f]",
+//          interval,
+//          xDistanceAndSpeed[DISTANCE_INDEX], yDistanceAndSpeed[DISTANCE_INDEX],
+//          xDistanceAndSpeed[SPEED_INDEX], yDistanceAndSpeed[SPEED_INDEX],
+//          accelX, accelY, newLatLon[0], newLatLon[1]);
+
+    // Send the event on
+    if (walkName != nil) {
+        [trackerEventHandler sendCoordinateUpdate:
+                walkName:
+                [[NSNumber numberWithDouble:newLatLon[0]] doubleValue] :
+                [[NSNumber numberWithDouble:newLatLon[1]] doubleValue] :
+                [[NSNumber numberWithDouble:0.0] doubleValue] :
+                [[NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[SPEED_INDEX], 2) + pow(yDistanceAndSpeed[SPEED_INDEX],2))] doubleValue] :
+                [[NSNumber numberWithDouble:heading] doubleValue] :
+                [[NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[DISTANCE_INDEX], 2) + pow(yDistanceAndSpeed[DISTANCE_INDEX],2))] doubleValue] :
+                @"INS"
+        ];
+    }
+
+    prevXSpeed    = xDistanceAndSpeed[SPEED_INDEX];
+    prevYSpeed    = yDistanceAndSpeed[SPEED_INDEX];
+    prevLatLon[0] = newLatLon[0];
+    prevLatLon[1] = newLatLon[1];
+    prevTime      = currTime;
 }
 
 @end
@@ -314,7 +397,7 @@ NSTimer *timer = nil;
 }
 
 - (void)updateLocation:(CLLocation*)location walkName:(NSString *) walkName distance:(double) distance {
-  NSLog(@"GPSTracker - Update Location from GPS");
+//  NSLog(@"GPSTracker - Update Location from GPS");
   if (_eventSink == nil) return;
 
   // Send the event on
@@ -342,7 +425,7 @@ NSTimer *timer = nil;
   prevLatLon[1] = location.coordinate.longitude;
   prevTime      = CFAbsoluteTimeGetCurrent();
   firstGPSFix   = true;
-  NSLog(@"GPSTracker - Update Location from GPS prev speed [%6.2f,%6.2f]",prevXSpeed,prevYSpeed);
+//  NSLog(@"GPSTracker - Update Location from GPS prev speed [%6.2f,%6.2f]",prevXSpeed,prevYSpeed);
 }
 
 - (void) sendCoordinateUpdate: (NSString * _Nonnull) walkName: (double) lat: (double) lon: (double) accuracy: (double) speed: (double) heading: (double) distance: (NSString* ) provider {
@@ -360,125 +443,8 @@ NSTimer *timer = nil;
     coordinates[@"fix_valid"]    = [NSNumber numberWithBool:true];
     coordinates[@"provider"]     = provider;
     coordinates[@"elapsedTime"] = [NSNumber numberWithLong:((CFAbsoluteTimeGetCurrent() - startTime)*1000.0)];
-    NSLog(@"GPSTracker - Update Location from INS");
+//    NSLog(@"GPSTracker - Update Location from INS");
     _eventSink(coordinates);
 }
 @end
 
-@implementation AccelerometerEventHandler
-- (void)updateAccelerometer:(CMAccelerometerData*)accelerometerData {
-//    NSMutableDictionary *values = [NSMutableDictionary dictionaryWithCapacity:4];
-//    values[@"reason"] = @"ACCELEROMETER_UPDATE";
-//    values[@"accelerometerX"] = [NSNumber numberWithDouble:accelerometerData.acceleration.x];
-//    values[@"accelerometerY"] = [NSNumber numberWithDouble:accelerometerData.acceleration.y];
-//    values[@"accelerometerZ"] = [NSNumber numberWithDouble:accelerometerData.acceleration.z];
-//    values[@"accelerometerTimestamp"] = 0; // [NSNumber numberWithLong:accelerometerData.accelerometer.timestamp];
-    if (firstGPSFix) {
-        [self reportUpdatedPosition:accelerometerData];
-    }
-}
-
-// Calculate distance travelled and final speed from acceleration, initial speed and time.
-// Acceleration is m/s**2
-// Speed is m/s
-// Time is in milliseconds
-// Output distance is in metres
-- (void)calculateDistanceAndSpeed:(double) accel: (double) initialSpeed: (int) time: (double *) distanceAndSpeed {
-    double deltaSpeed                = (accel*time)/1000.0;
-    double finalSpeed                = initialSpeed + deltaSpeed;
-    distanceAndSpeed[SPEED_INDEX]    = finalSpeed;
-    distanceAndSpeed[DISTANCE_INDEX] = (initialSpeed + finalSpeed)*0.5*((double)time/1000.0);
-    NSLog(@"GPSTracker - accel %6.2f speed %6.2f delta %6.4f time %d final speed %6.2f speed %6.2f distance %6.2f",
-          accel, initialSpeed, deltaSpeed, time, distanceAndSpeed[SPEED_INDEX], distanceAndSpeed[DISTANCE_INDEX]);
- }
-
-// Calculate the new lat/lon from the current lat/lon and x/y distance (x - NorthSouth, y - EastWest)
-// https://stackoverflow.com/questions/7477003/calculating-new-longitude-latitude-from-old-n-meters
-// Latitude:
-//    var earth = 6378.137,  //radius of the earth in kilometer
-//       pi = Math.PI,
-//       m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree`
-//    var new_latitude = latitude + (your_meters * m);
-// Longitude:
-//   var earth = 6378.137,  //radius of the earth in kilometer
-//      pi = Math.PI,
-//      cos = Math.cos,
-//      m = (1 / ((2 * pi / 360) * earth)) / 1000;  //1 meter in degree
-//   var new_longitude = longitude + (your_meters * m) / cos(latitude * (pi / 180));
-- (void)calculateNewLatLon:(double*) currentLatLon: (double) xDistance: (double) yDistance: (double*) newLatLon {
-    newLatLon[0] = currentLatLon[0] + (xDistance*ONE_METRE);
-    newLatLon[1] = currentLatLon[1] + (yDistance*ONE_METRE)/(cos((currentLatLon[1]*M_PI)/180.0));
-}
-
-- (void)reportUpdatedPosition:(CMAccelerometerData*)accelerometerData {
-    double xDistanceAndSpeed[2];
-    double yDistanceAndSpeed[2];
-    double newLatLon[2];
-
-    CFAbsoluteTime   currTime       = CFAbsoluteTimeGetCurrent();
-    CMRotationMatrix rotationMatrix = self.motionManager.deviceMotion.attitude.rotationMatrix;
-
-//    double accelX = rotationMatrix.m11 * accelerometerData.acceleration.x +
-//                    rotationMatrix.m12 * accelerometerData.acceleration.y +
-//                    rotationMatrix.m13 * accelerometerData.acceleration.z;
-//    double accelY = rotationMatrix.m21 * accelerometerData.acceleration.x +
-//                    rotationMatrix.m22 * accelerometerData.acceleration.y +
-//                    rotationMatrix.m23 * accelerometerData.acceleration.z;
-    double accelX = rotationMatrix.m11 * self.motionManager.deviceMotion.userAcceleration.x +
-                    rotationMatrix.m12 * self.motionManager.deviceMotion.userAcceleration.y +
-                    rotationMatrix.m13 * self.motionManager.deviceMotion.userAcceleration.z;
-    double accelY = rotationMatrix.m21 * self.motionManager.deviceMotion.userAcceleration.x +
-                    rotationMatrix.m22 * self.motionManager.deviceMotion.userAcceleration.y +
-                    rotationMatrix.m23 * self.motionManager.deviceMotion.userAcceleration.z;
-    NSLog(@"GPSTracker - reportUpdatedPosition raw accel [%6.2f,%6.2f,%6.2f] adjusted [%6.2f,%6.2f] speed [%6.2f,%6.2f]",
-          self.motionManager.deviceMotion.userAcceleration.x,
-          self.motionManager.deviceMotion.userAcceleration.y,
-          self.motionManager.deviceMotion.userAcceleration.z,
-          accelX, accelY, prevXSpeed, prevYSpeed);
-    NSLog(@"GPSTracker - reportUpdatedPosition matrix [%6.2f,%6.2f,%6.2f]",rotationMatrix.m11,rotationMatrix.m12,rotationMatrix.m13);
-    NSLog(@"GPSTracker -                              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m21,rotationMatrix.m22,rotationMatrix.m23);
-    NSLog(@"GPSTracker -                              [%6.2f,%6.2f,%6.2f]",rotationMatrix.m31,rotationMatrix.m32,rotationMatrix.m33);
-
-    long interval = [[NSNumber numberWithDouble:(currTime - prevTime)*1000.0] longValue];
-    [self calculateDistanceAndSpeed:accelX : prevXSpeed : interval : xDistanceAndSpeed];
-    [self calculateDistanceAndSpeed:accelY : prevYSpeed : interval : yDistanceAndSpeed];
-    [self calculateNewLatLon:prevLatLon : xDistanceAndSpeed[DISTANCE_INDEX] : yDistanceAndSpeed[DISTANCE_INDEX] : newLatLon];
-
-    // Calculate the heading, allowing for tan approaching infinity (y approaching 0)
-    double heading = yDistanceAndSpeed[1] > ZERO_TOL ? atan(xDistanceAndSpeed[DISTANCE_INDEX]/yDistanceAndSpeed[SPEED_INDEX]) : 90.0;
-
-    NSLog(@"GPSTracker - reportUpdatedPosition interval %4d dist[%6.2f,%6.2f] speed [%6.6f,%6.6f] accel[%6.6f,%6.6f] pos [%6.6f,%6.6f]",
-              interval,
-              xDistanceAndSpeed[DISTANCE_INDEX], yDistanceAndSpeed[DISTANCE_INDEX],
-              xDistanceAndSpeed[SPEED_INDEX], yDistanceAndSpeed[SPEED_INDEX],
-              accelX, accelY, newLatLon[0], newLatLon[1]);
-
-    // Send the event on
-    if (_walkName != nil) {
-        [trackerEventHandler sendCoordinateUpdate:
-           _walkName:
-           [[NSNumber numberWithDouble:newLatLon[0]] doubleValue] :
-           [[NSNumber numberWithDouble:newLatLon[1]] doubleValue] :
-           [[NSNumber numberWithDouble:0.0] doubleValue] :
-           [[NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[SPEED_INDEX], 2) + pow(yDistanceAndSpeed[SPEED_INDEX],2))] doubleValue] :
-           [[NSNumber numberWithDouble:heading] doubleValue] :
-           [[NSNumber numberWithDouble:sqrt(pow(xDistanceAndSpeed[DISTANCE_INDEX], 2) + pow(yDistanceAndSpeed[DISTANCE_INDEX],2))] doubleValue] :
-           @"INS"
-        ];
-    }
-
-    prevXSpeed    = xDistanceAndSpeed[SPEED_INDEX];
-    prevYSpeed    = yDistanceAndSpeed[SPEED_INDEX];
-    prevLatLon[0] = newLatLon[0];
-    prevLatLon[1] = newLatLon[1];
-    prevTime      = currTime;
-}
-
-- (void)setWalkName: (NSString*) walkName {
-    _walkName = walkName;
-}
-
-- (void)setMotionManger: (CMMotionManager *) motionManager {
-    self.motionManager = motionManager;
-}
-@end
